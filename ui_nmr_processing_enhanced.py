@@ -1551,7 +1551,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         filter_desc = QLabel(
             "Quality filtering uses residual analysis to identify and keep only the best quality scans. "
             "Each scan is compared to a reference scan, and scans with large deviations are filtered out. "
-            "This feature is always active to ensure optimal data quality."
+            "Adjust the threshold below to control filtering sensitivity."
         )
         filter_desc.setWordWrap(True)
         filter_desc.setStyleSheet("font-size: 9px; color: #757575; padding: 4px; margin-bottom: 8px;")
@@ -1573,18 +1573,55 @@ class EnhancedNMRProcessingUI(QMainWindow):
         """)
         quality_layout.addWidget(self.scan_selection_info)
         
-        # Button to open interactive selector
-        self.scan_filter_btn = QPushButton("Open Interactive Scan Selector")
-        self.scan_filter_btn.setEnabled(False)  # Will be enabled after loading data
-        self.scan_filter_btn.setStyleSheet("""
+        # Quality threshold control (embedded in main UI)
+        threshold_group = QGroupBox("Quality Threshold")
+        threshold_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 10px;
+                font-weight: bold;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 15px;
+                background-color: #fafafa;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #424242;
+            }
+        """)
+        threshold_layout = QVBoxLayout()
+        
+        # Slider and value display
+        slider_layout = QHBoxLayout()
+        slider_layout.addWidget(QLabel("Threshold:"))
+        self.quality_threshold_slider = QSlider(Qt.Horizontal)
+        self.quality_threshold_slider.setMinimum(0)
+        self.quality_threshold_slider.setMaximum(100)
+        self.quality_threshold_slider.setValue(50)  # Default 50%
+        self.quality_threshold_slider.setEnabled(False)
+        self.quality_threshold_slider.valueChanged.connect(self.on_quality_threshold_changed)
+        slider_layout.addWidget(self.quality_threshold_slider)
+        
+        self.quality_threshold_label = QLabel("50%")
+        self.quality_threshold_label.setStyleSheet("font-weight: bold; color: #7e57c2; min-width: 40px;")
+        slider_layout.addWidget(self.quality_threshold_label)
+        threshold_layout.addLayout(slider_layout)
+        
+        # Apply button
+        self.apply_threshold_btn = QPushButton("Apply Threshold & Reprocess")
+        self.apply_threshold_btn.setEnabled(False)
+        self.apply_threshold_btn.setStyleSheet("""
             QPushButton {
                 background-color: #7e57c2;
                 color: white;
-                padding: 12px 16px;
+                padding: 8px 12px;
                 font-weight: bold;
-                font-size: 11px;
+                font-size: 10px;
                 border: none;
-                border-radius: 5px;
+                border-radius: 4px;
             }
             QPushButton:hover {
                 background-color: #673ab7;
@@ -1597,19 +1634,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 color: #757575;
             }
         """)
-        self.scan_filter_btn.clicked.connect(self.open_scan_filter_dialog)
-        quality_layout.addWidget(self.scan_filter_btn)
+        self.apply_threshold_btn.clicked.connect(self.apply_quality_threshold)
+        threshold_layout.addWidget(self.apply_threshold_btn)
         
-        filter_hint = QLabel(
-            "Click the button above to open an interactive window where you can:\n"
-            "• View quality metrics for each scan\n"
-            "• Adjust the quality threshold\n"
-            "• Select scans manually if needed\n"
-            "• Save the filtered scan results"
-        )
-        filter_hint.setWordWrap(True)
-        filter_hint.setStyleSheet("font-size: 9px; color: #757575; font-style: italic; padding: 8px;")
-        quality_layout.addWidget(filter_hint)
+        threshold_group.setLayout(threshold_layout)
+        quality_layout.addWidget(threshold_group)
         
         quality_group.setLayout(quality_layout)
         layout.addWidget(quality_group)
@@ -2045,9 +2074,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     self.scan_api.enable_filtering(True)  # Always enabled
                     self.scan_filtering_enabled = True
                     
-                    # Enable the interactive selector button
-                    if hasattr(self, 'scan_filter_btn'):
-                        self.scan_filter_btn.setEnabled(True)
+                    # Enable the threshold controls
+                    if hasattr(self, 'quality_threshold_slider'):
+                        self.quality_threshold_slider.setEnabled(True)
+                    if hasattr(self, 'apply_threshold_btn'):
+                        self.apply_threshold_btn.setEnabled(True)
                     
                     self.update_scan_selection_info()
                     print(f"✓ Scan quality filtering initialized and enabled")
@@ -2716,19 +2747,28 @@ class EnhancedNMRProcessingUI(QMainWindow):
             processing_data = compiled[0]
             
             # Step 2: Apply good scans filtering if enabled
+            print(f"DEBUG: Checking quality filtering - HAS_SCAN_SELECTION={HAS_SCAN_SELECTION}, "
+                  f"scan_filtering_enabled={self.scan_filtering_enabled}, "
+                  f"scan_api={'exists' if self.scan_api else 'None'}")
+            
             if HAS_SCAN_SELECTION and self.scan_filtering_enabled and self.scan_api:
                 try:
                     # Get list of good scan numbers from quality filter
                     selected_scans = self.scan_api.get_selected_scans()
+                    print(f"DEBUG: selected_scans = {selected_scans}")
+                    print(f"DEBUG: Total good scans: {len(selected_scans)}")
                     
                     if len(selected_scans) == 0:
-                        print("Warning: No scans pass quality filter, using unfiltered data")
+                        print("⚠️ WARNING: No scans pass quality filter, using unfiltered data")
                         return processing_data
                     
                     # Reload only the good scans
+                    print(f"🔄 Loading {len(selected_scans)} good scans individually...")
                     scan_data = []
-                    for scan_num in selected_scans:
-                        # Load individual scan (1-indexed)
+                    for i, scan_num in enumerate(selected_scans):
+                        # scan_num is 0-indexed from get_selected_scans()
+                        # nmrduino_dat_interp expects 1-indexed
+                        print(f"  Loading scan {i+1}/{len(selected_scans)}: #{scan_num} (as {scan_num+1} for dat_interp)")
                         scan_compiled = nmr_util.nmrduino_dat_interp(
                             self.current_path, scan_num + 1, nowarn=True)
                         scan_data.append(scan_compiled[0])
@@ -2736,11 +2776,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     if len(scan_data) > 0:
                         # Average the good scans
                         processing_data = np.mean(scan_data, axis=0)
-                        print(f"Using {len(scan_data)} good scans after quality filtering")
+                        print(f"✅ SUCCESS: Using {len(scan_data)} good scans after quality filtering")
+                        print(f"   Average data shape: {processing_data.shape}")
                     
                 except Exception as e:
-                    print(f"Warning: Error applying scan quality filter: {e}")
+                    print(f"❌ ERROR: Failed to apply scan quality filter: {e}")
+                    import traceback
+                    traceback.print_exc()
                     # Continue with unfiltered data
+            else:
+                print(f"ℹ️ Quality filtering NOT applied (one or more conditions not met)")
             
             return processing_data
             
@@ -2756,8 +2801,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
     # ========================================================================
     
     @Slot()
-    def open_scan_filter_dialog(self):
-        """Open interactive scan filter selection window"""
+    def on_quality_threshold_changed(self, value):
+        """Update threshold label when slider changes"""
+        if hasattr(self, 'quality_threshold_label'):
+            self.quality_threshold_label.setText(f"{value}%")
+    
+    @Slot()
+    def apply_quality_threshold(self):
+        """Apply quality threshold and reprocess data"""
         if not HAS_SCAN_SELECTION:
             QMessageBox.warning(self, "Feature Not Available", 
                               "Scan selection feature is not available.\n"
@@ -2771,21 +2822,57 @@ class EnhancedNMRProcessingUI(QMainWindow):
             return
         
         try:
-            print("Opening interactive scan selector...")
-            # Open interactive selector window (blocking)
-            self.scan_api.open_interactive_selector()
+            # Get threshold value (0-100)
+            threshold_percent = self.quality_threshold_slider.value()
+            print(f"🎯 Applying quality threshold: {threshold_percent}%")
             
-            print("Scan selector closed, updating selection info...")
-            # After user closes window, update info and reprocess
-            self.update_scan_selection_info()
-            self.process_data()
+            # Convert percentage to actual threshold value
+            # The scan API uses a threshold based on quality metrics
+            # We need to map 0-100% to the actual metric range
+            # Lower percentage = more strict (keep fewer scans)
+            # Higher percentage = more lenient (keep more scans)
+            
+            # Get current quality metrics range
+            if hasattr(self.scan_api, 'selector') and self.scan_api.selector:
+                metrics = self.scan_api.selector.metrics
+                if metrics and hasattr(metrics, 'residuals') and metrics.residuals is not None:
+                    min_residual = float(np.min(metrics.residuals))
+                    max_residual = float(np.max(metrics.residuals))
+                    
+                    # Map percentage to threshold
+                    # 0% = max_residual (keep only best)
+                    # 100% = min_residual (keep all)
+                    threshold_value = max_residual - (threshold_percent / 100.0) * (max_residual - min_residual)
+                    
+                    print(f"  Residual range: [{min_residual:.2e}, {max_residual:.2e}]")
+                    print(f"  Calculated threshold: {threshold_value:.2e}")
+                    
+                    # Update the API's threshold
+                    self.scan_api.selector.quality_threshold = threshold_value
+                    
+                    # Recompute selection
+                    self.scan_api.selector._compute_selection()
+                    
+                    print("✅ Threshold applied, reprocessing data...")
+                    # Update info and reprocess
+                    self.update_scan_selection_info()
+                    self.update_scan_quality_plot()
+                    self.process_data()
+                else:
+                    QMessageBox.warning(self, "No Metrics", 
+                                      "Quality metrics not available.\n"
+                                      "Please ensure data is properly loaded.")
+            else:
+                QMessageBox.warning(self, "Not Ready", 
+                                  "Scan selector not ready.\n"
+                                  "Please load data first.")
             
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"Error opening scan filter dialog:\n{error_details}")
-            QMessageBox.warning(self, "Scan Filter Error", 
-                              f"Failed to open scan filter dialog:\n{str(e)}\n\n"
+            print(f"❌ Error applying quality threshold:\n{error_details}")
+            QMessageBox.warning(self, "Threshold Error", 
+                              f"Failed to apply quality threshold:\n{str(e)}\n\n"
                               f"Check console for detailed error message.")
     
     def update_scan_selection_info(self):
