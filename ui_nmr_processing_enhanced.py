@@ -44,6 +44,14 @@ except:
     HAS_NMRDUINO = False
     print("Warning: nmrduino_util not found, some features disabled")
 
+# Import scan selection API
+try:
+    from fid_select_refactored import ScanSelectionAPI
+    HAS_SCAN_SELECTION = True
+except:
+    HAS_SCAN_SELECTION = False
+    print("Warning: fid_select_refactored not found, scan selection features disabled")
+
 
 class MplCanvas(FigureCanvas):
     """Matplotlib canvas widget"""
@@ -159,6 +167,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.acq_time = None
         self.scan_count = 0
         self.current_path = None
+        
+        # Scan selection API
+        self.scan_api = None
+        self.scan_filtering_enabled = False
         
         # Processing results
         self.processed = None
@@ -480,6 +492,90 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         data_group.setLayout(data_layout)
         layout.addWidget(data_group)
+        
+        # Scan selection group
+        if HAS_SCAN_SELECTION:
+            scan_group = QGroupBox("Scan Quality Selection")
+            scan_group.setStyleSheet("""
+                QGroupBox {
+                    font-weight: bold;
+                    border: 2px solid #e0e0e0;
+                    border-radius: 6px;
+                    margin-top: 12px;
+                    padding-top: 10px;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 10px;
+                    padding: 0 5px;
+                    color: #424242;
+                }
+            """)
+            scan_layout = QVBoxLayout()
+            scan_layout.setSpacing(8)
+            
+            # Enable filtering checkbox
+            self.enable_scan_filter = QCheckBox("Enable Good Scans Filtering")
+            self.enable_scan_filter.setChecked(False)
+            self.enable_scan_filter.setStyleSheet("""
+                QCheckBox {
+                    font-size: 10px;
+                    font-weight: normal;
+                    padding: 4px;
+                }
+                QCheckBox::indicator {
+                    width: 16px;
+                    height: 16px;
+                }
+            """)
+            self.enable_scan_filter.stateChanged.connect(self.on_scan_filter_toggle)
+            scan_layout.addWidget(self.enable_scan_filter)
+            
+            # Selection info label
+            self.scan_selection_info = QLabel("Using all scans (filtering disabled)")
+            self.scan_selection_info.setWordWrap(True)
+            self.scan_selection_info.setStyleSheet("""
+                QLabel {
+                    padding: 8px;
+                    background-color: #e8f5e9;
+                    border: 1px solid #c8e6c9;
+                    border-radius: 5px;
+                    color: #2e7d32;
+                    font-size: 10px;
+                }
+            """)
+            scan_layout.addWidget(self.scan_selection_info)
+            
+            # Button to open interactive selector
+            self.scan_filter_btn = QPushButton("Adjust Scan Filter...")
+            self.scan_filter_btn.setEnabled(False)
+            self.scan_filter_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #7e57c2;
+                    color: white;
+                    padding: 10px 16px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    border: none;
+                    border-radius: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #673ab7;
+                }
+                QPushButton:pressed {
+                    background-color: #5e35b1;
+                }
+                QPushButton:disabled {
+                    background-color: #bdbdbd;
+                    color: #757575;
+                }
+            """)
+            self.scan_filter_btn.clicked.connect(self.open_scan_filter_dialog)
+            scan_layout.addWidget(self.scan_filter_btn)
+            
+            scan_group.setLayout(scan_layout)
+            layout.addWidget(scan_group)
         
         # Parameter tabs
         param_tabs = QTabWidget()
@@ -1635,6 +1731,19 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.process_btn.setEnabled(True)
             self.save_params_btn.setEnabled(True)
             
+            # Initialize scan selection API
+            if HAS_SCAN_SELECTION:
+                try:
+                    self.scan_api = ScanSelectionAPI(folder, verbose=False)
+                    self.scan_api.setup_quality_analysis()  # Use first scan as reference by default
+                    self.scan_api.enable_filtering(False)  # Default: disabled
+                    self.scan_filtering_enabled = False
+                    self.enable_scan_filter.setChecked(False)
+                    self.update_scan_selection_info()
+                except Exception as e:
+                    print(f"Warning: Failed to initialize scan selection: {e}")
+                    self.scan_api = None
+            
             # Auto process
             self.process_data()
             
@@ -1651,6 +1760,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait()
+        
+        # Get data (either filtered scans or all scans)
+        processing_data = self.get_selected_scans_data()
         
         # Update parameters from UI
         self.params = {
@@ -1673,7 +1785,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Process in background
         self.worker = ProcessingWorker(
-            self.halp,
+            processing_data,  # Use selected scans data
             self.sampling_rate,
             self.acq_time,
             self.params
@@ -2102,6 +2214,136 @@ class EnhancedNMRProcessingUI(QMainWindow):
         plot_splitter_state = self.settings.value('plot_splitter')
         if plot_splitter_state:
             self.plot_splitter.restoreState(plot_splitter_state)
+    
+    # ========================================================================
+    # Scan Selection Methods
+    # ========================================================================
+    
+    @Slot()
+    def on_scan_filter_toggle(self, state):
+        """Handle scan filter checkbox toggle"""
+        if not HAS_SCAN_SELECTION or self.scan_api is None:
+            return
+        
+        enabled = (state == Qt.Checked)
+        self.scan_filtering_enabled = enabled
+        self.scan_api.enable_filtering(enabled)
+        self.scan_filter_btn.setEnabled(enabled)
+        
+        # Update info display
+        self.update_scan_selection_info()
+        
+        # Reprocess with new scan selection
+        self.process_data()
+    
+    @Slot()
+    def open_scan_filter_dialog(self):
+        """Open interactive scan filter selection window"""
+        if not HAS_SCAN_SELECTION or self.scan_api is None:
+            return
+        
+        try:
+            # Open interactive selector window (blocking)
+            self.scan_api.open_interactive_selector()
+            
+            # After user closes window, update info and reprocess
+            self.update_scan_selection_info()
+            self.process_data()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Scan Filter Error", 
+                              f"Failed to open scan filter dialog:\n{e}")
+    
+    def update_scan_selection_info(self):
+        """Update scan selection info display"""
+        if not HAS_SCAN_SELECTION or self.scan_api is None:
+            return
+        
+        info = self.scan_api.get_selection_info()
+        
+        if not info['filtering_enabled']:
+            self.scan_selection_info.setText("Using all scans (filtering disabled)")
+            self.scan_selection_info.setStyleSheet("""
+                QLabel {
+                    padding: 8px;
+                    background-color: #e3f2fd;
+                    border: 1px solid #90caf9;
+                    border-radius: 5px;
+                    color: #1976d2;
+                    font-size: 10px;
+                }
+            """)
+        else:
+            selected = info['selection_count']
+            total = info['total_scans']
+            rate = info['selection_rate']
+            
+            self.scan_selection_info.setText(
+                f"Using {selected}/{total} scans ({rate:.1f}% selected)\n"
+                f"Threshold: {info['threshold']:.2e}"
+            )
+            
+            # Color based on selection rate
+            if rate >= 80:
+                bg_color = "#e8f5e9"
+                border_color = "#c8e6c9"
+                text_color = "#2e7d32"
+            elif rate >= 50:
+                bg_color = "#fff3e0"
+                border_color = "#ffe0b2"
+                text_color = "#e65100"
+            else:
+                bg_color = "#ffebee"
+                border_color = "#ffcdd2"
+                text_color = "#c62828"
+            
+            self.scan_selection_info.setStyleSheet(f"""
+                QLabel {{
+                    padding: 8px;
+                    background-color: {bg_color};
+                    border: 1px solid {border_color};
+                    border-radius: 5px;
+                    color: {text_color};
+                    font-size: 10px;
+                }}
+            """)
+    
+    def get_selected_scans_data(self):
+        """
+        Get data from selected scans for processing.
+        Returns averaged FID data.
+        """
+        if not HAS_SCAN_SELECTION or self.scan_api is None or not self.scan_filtering_enabled:
+            # Return original averaged data
+            return self.halp
+        
+        try:
+            # Get selected scan numbers
+            selected_scans = self.scan_api.get_selected_scans()
+            
+            if len(selected_scans) == 0:
+                QMessageBox.warning(self, "No Scans Selected", 
+                                  "No scans pass the current filter threshold.\n"
+                                  "Please adjust the filter or disable filtering.")
+                return self.halp
+            
+            # Load and average selected scans
+            scan_data = []
+            for scan_num in selected_scans:
+                data = self.scan_api.data_loader.load_scan(scan_num)
+                if data:
+                    scan_data.append(data.time_data)
+            
+            if len(scan_data) == 0:
+                return self.halp
+            
+            # Average selected scans
+            averaged_fid = np.mean(scan_data, axis=0)
+            return averaged_fid
+            
+        except Exception as e:
+            print(f"Warning: Error loading selected scans, using all scans: {e}")
+            return self.halp
 
 
 def main():
