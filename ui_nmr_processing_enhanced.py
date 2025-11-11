@@ -1557,6 +1557,25 @@ class EnhancedNMRProcessingUI(QMainWindow):
         filter_desc.setStyleSheet("font-size: 9px; color: #757575; padding: 4px; margin-bottom: 8px;")
         quality_layout.addWidget(filter_desc)
         
+        # Reference scan selection
+        ref_layout = QHBoxLayout()
+        ref_label = QLabel("Reference Scan:")
+        ref_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        ref_layout.addWidget(ref_label)
+        
+        self.reference_scan_combo = QComboBox()
+        self.reference_scan_combo.setEnabled(False)
+        self.reference_scan_combo.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.reference_scan_combo.addItem("First Scan (Default)", 0)
+        self.reference_scan_combo.addItem("Average of All Scans", -1)
+        self.reference_scan_combo.currentIndexChanged.connect(self.on_reference_scan_changed)
+        ref_layout.addWidget(self.reference_scan_combo, 1)
+        
+        ref_hint = QLabel("(Used for quality comparison)")
+        ref_hint.setStyleSheet("font-size: 9px; color: #757575; font-style: italic;")
+        ref_layout.addWidget(ref_hint)
+        quality_layout.addLayout(ref_layout)
+        
         # Selection info label
         self.scan_selection_info = QLabel("Load data to view scan quality analysis")
         self.scan_selection_info.setWordWrap(True)
@@ -1633,7 +1652,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         threshold_layout.addLayout(threshold_slider_layout)
         
         # Hint text
-        hint_text = QLabel("💡 Tip: Use Selection Rate slider for quick adjustment, or fine-tune with Threshold slider")
+        hint_text = QLabel("Tip: Use Selection Rate slider for quick adjustment, or fine-tune with Threshold slider")
         hint_text.setWordWrap(True)
         hint_text.setStyleSheet("font-size: 9px; color: #757575; font-style: italic; padding: 8px; background-color: #fffde7; border-radius: 3px;")
         threshold_layout.addWidget(hint_text)
@@ -1642,7 +1661,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         button_layout = QHBoxLayout()
         
         # Input Rate button
-        self.input_rate_btn = QPushButton("⌨️ Input Exact Rate")
+        self.input_rate_btn = QPushButton("Input Exact Rate")
         self.input_rate_btn.setEnabled(False)
         self.input_rate_btn.setStyleSheet("""
             QPushButton {
@@ -1671,7 +1690,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Apply button
         
         # Apply button
-        self.apply_threshold_btn = QPushButton("🔄 Apply & Reprocess")
+        self.apply_threshold_btn = QPushButton("Apply & Reprocess")
         self.apply_threshold_btn.setEnabled(False)
         self.apply_threshold_btn.setStyleSheet("""
             QPushButton {
@@ -1698,7 +1717,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         button_layout.addWidget(self.apply_threshold_btn)
         
         # Save button
-        self.save_selection_btn = QPushButton("💾 Save Selection")
+        self.save_selection_btn = QPushButton("Save Selection")
         self.save_selection_btn.setEnabled(False)
         self.save_selection_btn.setStyleSheet("""
             QPushButton {
@@ -1948,7 +1967,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         spectrum_layout.addWidget(self.plot_splitter)
         
         # Add spectrum tab
-        self.plot_tabs.addTab(spectrum_tab, "📊 NMR Spectrum")
+        self.plot_tabs.addTab(spectrum_tab, "NMR Spectrum")
         
         # Tab 2: Scan Quality (if available)
         if HAS_SCAN_SELECTION:
@@ -1960,7 +1979,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             scan_quality_widget.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 4px;")
             quality_layout.addWidget(scan_quality_widget)
             
-            self.plot_tabs.addTab(quality_tab, "🔍 Scan Quality")
+            self.plot_tabs.addTab(quality_tab, "Scan Quality")
         
         layout.addWidget(self.plot_tabs)
         
@@ -2206,6 +2225,23 @@ class EnhancedNMRProcessingUI(QMainWindow):
             if HAS_SCAN_SELECTION:
                 try:
                     self.scan_api = ScanSelectionAPI(folder, verbose=False)
+                    
+                    # Populate reference scan combo box with available scans
+                    if hasattr(self, 'reference_scan_combo'):
+                        self.reference_scan_combo.blockSignals(True)
+                        # Keep first two items (First Scan, Average)
+                        while self.reference_scan_combo.count() > 2:
+                            self.reference_scan_combo.removeItem(2)
+                        # Add individual scan options
+                        available_scans = self.scan_api.get_all_scans()
+                        for scan_num in available_scans[:20]:  # Limit to first 20 to avoid clutter
+                            self.reference_scan_combo.addItem(f"Scan #{scan_num}", scan_num)
+                        if len(available_scans) > 20:
+                            self.reference_scan_combo.addItem(f"... ({len(available_scans)} total)", None)
+                        self.reference_scan_combo.setEnabled(True)
+                        self.reference_scan_combo.blockSignals(False)
+                    
+                    # Setup with default reference (first scan)
                     self.scan_api.setup_quality_analysis()  # Use first scan as reference by default
                     self.scan_api.enable_filtering(True)  # Always enabled
                     self.scan_filtering_enabled = True
@@ -2904,11 +2940,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     print(f"DEBUG: Total good scans: {len(selected_scans)}")
                     
                     if len(selected_scans) == 0:
-                        print("⚠️ WARNING: No scans pass quality filter, using unfiltered data")
+                        print("WARNING: No scans pass quality filter, using unfiltered data")
                         return processing_data
                     
                     # Reload only the good scans
-                    print(f"🔄 Loading {len(selected_scans)} good scans individually...")
+                    print(f"Loading {len(selected_scans)} good scans individually...")
                     scan_data = []
                     for i, scan_num in enumerate(selected_scans):
                         # scan_num is 0-indexed from get_selected_scans()
@@ -2921,16 +2957,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     if len(scan_data) > 0:
                         # Average the good scans
                         processing_data = np.mean(scan_data, axis=0)
-                        print(f"✅ SUCCESS: Using {len(scan_data)} good scans after quality filtering")
+                        print(f"SUCCESS: Using {len(scan_data)} good scans after quality filtering")
                         print(f"   Average data shape: {processing_data.shape}")
                     
                 except Exception as e:
-                    print(f"❌ ERROR: Failed to apply scan quality filter: {e}")
+                    print(f"ERROR: Failed to apply scan quality filter: {e}")
                     import traceback
                     traceback.print_exc()
                     # Continue with unfiltered data
             else:
-                print(f"ℹ️ Quality filtering NOT applied (one or more conditions not met)")
+                print(f"INFO: Quality filtering NOT applied (one or more conditions not met)")
             
             return processing_data
             
@@ -2944,6 +2980,47 @@ class EnhancedNMRProcessingUI(QMainWindow):
     # ========================================================================
     # Scan Selection Methods
     # ========================================================================
+    
+    @Slot()
+    def on_reference_scan_changed(self, index):
+        """Handle reference scan selection change"""
+        if not HAS_SCAN_SELECTION or self.scan_api is None:
+            return
+        
+        try:
+            # Get selected reference
+            ref_data = self.reference_scan_combo.itemData(index)
+            
+            if ref_data is None:  # "..." item, ignore
+                return
+            
+            print(f"Changing reference scan to: {ref_data if ref_data != -1 else 'Average of all scans'}")
+            
+            # Re-setup quality analysis with new reference
+            if ref_data == -1:
+                # Use average of all scans as reference
+                available_scans = self.scan_api.get_all_scans()
+                self.scan_api.setup_quality_analysis(reference_scans=available_scans)
+            elif ref_data == 0:
+                # Use first scan (default)
+                self.scan_api.setup_quality_analysis()
+            else:
+                # Use specific scan
+                self.scan_api.setup_quality_analysis(reference_scan=ref_data)
+            
+            # Update display
+            self.update_scan_selection_info()
+            self.update_scan_quality_plot()
+            
+            print("Reference scan changed, quality metrics recalculated")
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"ERROR: Failed to change reference scan:\n{error_details}")
+            QMessageBox.warning(self, "Reference Scan Error", 
+                              f"Failed to change reference scan:\n{str(e)}\n\n"
+                              f"Check console for detailed error message.")
     
     @Slot()
     def on_quality_rate_changed(self, value):
@@ -2985,7 +3062,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             if use_rate_slider:
                 # Use selection rate (easier for users)
                 rate_percent = self.quality_rate_slider.value()
-                print(f"🎯 Applying selection rate: {rate_percent}%")
+                print(f"Applying selection rate: {rate_percent}%")
                 
                 # Get sorted residuals to map rate to threshold
                 metrics = self.scan_api.selector.metrics
@@ -3008,7 +3085,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             else:
                 # Use threshold slider (for fine-tuning)
                 threshold_percent = self.quality_threshold_slider.value()
-                print(f"🎯 Applying quality threshold: {threshold_percent}%")
+                print(f"Applying quality threshold: {threshold_percent}%")
                 
                 metrics = self.scan_api.selector.metrics
                 min_residual = float(np.min(metrics.residuals))
@@ -3025,7 +3102,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 metrics, threshold_value
             )
             
-            print("✅ Threshold applied, reprocessing data...")
+            print("Threshold applied, reprocessing data...")
             # Update info, plot, and reprocess
             self.update_scan_selection_info()
             self.update_scan_quality_plot()
@@ -3034,7 +3111,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"❌ Error applying quality threshold:\n{error_details}")
+            print(f"ERROR: Error applying quality threshold:\n{error_details}")
             QMessageBox.warning(self, "Threshold Error", 
                               f"Failed to apply quality threshold:\n{str(e)}\n\n"
                               f"Check console for detailed error message.")
@@ -3069,7 +3146,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
                         # Update slider (which will trigger the valueChanged event)
                         if hasattr(self, 'quality_rate_slider'):
                             self.quality_rate_slider.setValue(int(rate))
-                            print(f"✅ Selection rate set to: {rate}%")
+                            print(f"Selection rate set to: {rate}%")
                             # Auto-apply
                             self.apply_quality_threshold()
                     else:
@@ -3079,7 +3156,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     QMessageBox.warning(self, "Invalid Input", 
                                       f"Invalid number format: {rate_str}")
         except Exception as e:
-            print(f"❌ Error inputting selection rate: {e}")
+            print(f"ERROR: Error inputting selection rate: {e}")
             QMessageBox.warning(self, "Error", f"Failed to input selection rate:\n{str(e)}")
     
     @Slot()
@@ -3118,7 +3195,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 f.write(f"\nSelected Scan Numbers:\n")
                 f.write(", ".join(map(str, selected_scans)) + "\n")
             
-            print(f"✅ Scan selection saved to: {filepath}")
+            print(f"Scan selection saved to: {filepath}")
             QMessageBox.information(self, "Save Successful", 
                                   f"Scan selection saved to:\n{filepath}\n\n"
                                   f"Selected {info['selection_count']}/{info['total_scans']} scans "
@@ -3127,7 +3204,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"❌ Error saving scan selection:\n{error_details}")
+            print(f"ERROR: Error saving scan selection:\n{error_details}")
             QMessageBox.warning(self, "Save Error", 
                               f"Failed to save scan selection:\n{str(e)}\n\n"
                               f"Check console for detailed error message.")
