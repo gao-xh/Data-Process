@@ -1620,9 +1620,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 except Exception as e:
                     print(f"Warning: Failed to auto-load parameters: {e}")
             
-            param_status = "<br><b>Parameters:</b> Auto-loaded ✓" if param_loaded else ""
+            param_status = "<br><b>Parameters:</b> Auto-loaded" if param_loaded else ""
             self.data_info.setText(
-                f"<b>✓ Loaded:</b> {os.path.basename(folder)}<br>"
+                f"<b>Loaded:</b> {os.path.basename(folder)}<br>"
                 f"<b>Points:</b> {len(self.halp)}<br>"
                 f"<b>Sampling:</b> {self.sampling_rate:.1f} Hz<br>"
                 f"<b>Acq Time:</b> {self.acq_time:.3f} s<br>"
@@ -1777,12 +1777,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
         spectrum_abs = np.abs(spectrum)
         
         results = []
-        results.append("═══ Processing Pipeline ═══")
-        results.append(f"✓ Savgol Filter: window={self.params['conv_points']}, poly={self.params['poly_order']}")
-        results.append(f"✓ Truncation: start={self.params['trunc_start']}, end={self.params['trunc_end']}")
-        results.append(f"✓ Apodization T2*: {self.params['apod_t2star']:.2f}")
-        results.append(f"✓ Hanning: {'Yes' if self.params['use_hanning'] else 'No'}")
-        results.append(f"✓ Zero Fill Factor: {self.params['zf_factor']:.2f}")
+        results.append("=== Processing Pipeline ===")
+        results.append(f"[OK] Savgol Filter: window={self.params['conv_points']}, poly={self.params['poly_order']}")
+        results.append(f"[OK] Truncation: start={self.params['trunc_start']}, end={self.params['trunc_end']}")
+        results.append(f"[OK] Apodization T2*: {self.params['apod_t2star']:.2f}")
+        results.append(f"[OK] Hanning: {'Yes' if self.params['use_hanning'] else 'No'}")
+        results.append(f"[OK] Zero Fill Factor: {self.params['zf_factor']:.2f}")
         
         # Calculate peak height
         peak_height = np.max(spectrum_abs)
@@ -1820,11 +1820,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             except Exception as e:
                 self.snr_label.setText("Error")
                 self.noise_label.setText("--")
-                results.append(f"\n✗ SNR calculation failed: {e}")
+                results.append(f"\n[ERROR] SNR calculation failed: {e}")
         else:
             self.snr_label.setText("N/A")
             self.noise_label.setText("--")
-            results.append("\n✗ nmrduino_util not available for SNR calculation")
+            results.append("\n[WARNING] nmrduino_util not available for SNR calculation")
         
         self.results_text.setText('\n'.join(results))
     
