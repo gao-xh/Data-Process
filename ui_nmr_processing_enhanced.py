@@ -493,143 +493,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
         data_group.setLayout(data_layout)
         layout.addWidget(data_group)
         
-        # Scan selection group
-        if HAS_SCAN_SELECTION:
-            scan_group = QGroupBox("Scan Quality Selection")
-            scan_group.setStyleSheet("""
-                QGroupBox {
-                    font-weight: bold;
-                    border: 2px solid #e0e0e0;
-                    border-radius: 6px;
-                    margin-top: 12px;
-                    padding-top: 10px;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    subcontrol-position: top left;
-                    left: 10px;
-                    padding: 0 5px;
-                    color: #424242;
-                }
-            """)
-            scan_layout = QVBoxLayout()
-            scan_layout.setSpacing(8)
-            
-            # Scan range selection
-            scan_range_layout = QGridLayout()
-            scan_range_layout.setSpacing(8)
-            
-            scan_mode_label = QLabel("Scan Range Mode:")
-            scan_mode_label.setStyleSheet("font-size: 10px; font-weight: bold; color: #424242;")
-            scan_range_layout.addWidget(scan_mode_label, 0, 0, 1, 3)
-            
-            self.scan_mode_all = QCheckBox("All Scans (Default)")
-            self.scan_mode_all.setChecked(True)
-            self.scan_mode_all.setStyleSheet("font-size: 10px;")
-            self.scan_mode_all.stateChanged.connect(self.on_scan_mode_changed)
-            scan_range_layout.addWidget(self.scan_mode_all, 1, 0, 1, 3)
-            
-            self.scan_mode_single = QCheckBox("Single Scan:")
-            self.scan_mode_single.setStyleSheet("font-size: 10px;")
-            self.scan_mode_single.stateChanged.connect(self.on_scan_mode_changed)
-            scan_range_layout.addWidget(self.scan_mode_single, 2, 0)
-            
-            self.scan_single_num = QSpinBox()
-            self.scan_single_num.setRange(0, 9999)
-            self.scan_single_num.setValue(0)
-            self.scan_single_num.setEnabled(False)
-            self.scan_single_num.setStyleSheet("font-size: 10px; padding: 4px;")
-            self.scan_single_num.valueChanged.connect(self.schedule_processing)
-            scan_range_layout.addWidget(self.scan_single_num, 2, 1, 1, 2)
-            
-            self.scan_mode_range = QCheckBox("Scan Range:")
-            self.scan_mode_range.setStyleSheet("font-size: 10px;")
-            self.scan_mode_range.stateChanged.connect(self.on_scan_mode_changed)
-            scan_range_layout.addWidget(self.scan_mode_range, 3, 0)
-            
-            self.scan_range_start = QSpinBox()
-            self.scan_range_start.setRange(0, 9999)
-            self.scan_range_start.setValue(0)
-            self.scan_range_start.setPrefix("From: ")
-            self.scan_range_start.setEnabled(False)
-            self.scan_range_start.setStyleSheet("font-size: 10px; padding: 4px;")
-            self.scan_range_start.valueChanged.connect(self.schedule_processing)
-            scan_range_layout.addWidget(self.scan_range_start, 3, 1)
-            
-            self.scan_range_end = QSpinBox()
-            self.scan_range_end.setRange(0, 9999)
-            self.scan_range_end.setValue(0)
-            self.scan_range_end.setPrefix("To: ")
-            self.scan_range_end.setEnabled(False)
-            self.scan_range_end.setStyleSheet("font-size: 10px; padding: 4px;")
-            self.scan_range_end.valueChanged.connect(self.schedule_processing)
-            scan_range_layout.addWidget(self.scan_range_end, 3, 2)
-            
-            scan_layout.addLayout(scan_range_layout)
-            
-            # Enable filtering checkbox
-            self.enable_scan_filter = QCheckBox("Enable Good Scans Filtering")
-            self.enable_scan_filter.setChecked(False)
-            self.enable_scan_filter.setStyleSheet("""
-                QCheckBox {
-                    font-size: 10px;
-                    font-weight: normal;
-                    padding: 4px;
-                    margin-top: 8px;
-                }
-                QCheckBox::indicator {
-                    width: 16px;
-                    height: 16px;
-                }
-            """)
-            self.enable_scan_filter.stateChanged.connect(self.on_scan_filter_toggle)
-            scan_layout.addWidget(self.enable_scan_filter)
-            
-            # Selection info label
-            self.scan_selection_info = QLabel("Using all scans (filtering disabled)")
-            self.scan_selection_info.setWordWrap(True)
-            self.scan_selection_info.setStyleSheet("""
-                QLabel {
-                    padding: 8px;
-                    background-color: #e8f5e9;
-                    border: 1px solid #c8e6c9;
-                    border-radius: 5px;
-                    color: #2e7d32;
-                    font-size: 10px;
-                }
-            """)
-            scan_layout.addWidget(self.scan_selection_info)
-            
-            # Button to open interactive selector
-            self.scan_filter_btn = QPushButton("Adjust Scan Filter...")
-            self.scan_filter_btn.setEnabled(False)
-            self.scan_filter_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #7e57c2;
-                    color: white;
-                    padding: 10px 16px;
-                    font-weight: bold;
-                    font-size: 11px;
-                    border: none;
-                    border-radius: 5px;
-                }
-                QPushButton:hover {
-                    background-color: #673ab7;
-                }
-                QPushButton:pressed {
-                    background-color: #5e35b1;
-                }
-                QPushButton:disabled {
-                    background-color: #bdbdbd;
-                    color: #757575;
-                }
-            """)
-            self.scan_filter_btn.clicked.connect(self.open_scan_filter_dialog)
-            scan_layout.addWidget(self.scan_filter_btn)
-            
-            scan_group.setLayout(scan_layout)
-            layout.addWidget(scan_group)
-        
         # Parameter tabs
         param_tabs = QTabWidget()
         param_tabs.setStyleSheet("""
@@ -666,6 +529,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Tab 2: Transform
         transform_tab = self.create_transform_tab()
         param_tabs.addTab(transform_tab, "Transform & Display")
+        
+        # Tab 3: Scan Selection (if available)
+        if HAS_SCAN_SELECTION:
+            scan_tab = self.create_scan_selection_tab()
+            param_tabs.addTab(scan_tab, "Scan Quality Selection")
         
         layout.addWidget(param_tabs)
         
@@ -1567,6 +1435,200 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout.addStretch()
         return tab
     
+    def create_scan_selection_tab(self):
+        """Create scan quality selection tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+        
+        # Scan range selection group
+        scan_range_group = QGroupBox("Scan Range Mode")
+        scan_range_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #424242;
+            }
+        """)
+        scan_range_layout = QVBoxLayout()
+        scan_range_layout.setSpacing(8)
+        
+        # Mode selection
+        mode_layout = QGridLayout()
+        mode_layout.setSpacing(8)
+        
+        self.scan_mode_all = QCheckBox("All Scans (Default)")
+        self.scan_mode_all.setChecked(True)
+        self.scan_mode_all.setStyleSheet("font-size: 10px; font-weight: bold;")
+        self.scan_mode_all.stateChanged.connect(self.on_scan_mode_changed)
+        mode_layout.addWidget(self.scan_mode_all, 0, 0, 1, 3)
+        
+        self.scan_mode_single = QCheckBox("Single Scan:")
+        self.scan_mode_single.setStyleSheet("font-size: 10px;")
+        self.scan_mode_single.stateChanged.connect(self.on_scan_mode_changed)
+        mode_layout.addWidget(self.scan_mode_single, 1, 0)
+        
+        self.scan_single_num = QSpinBox()
+        self.scan_single_num.setRange(0, 9999)
+        self.scan_single_num.setValue(0)
+        self.scan_single_num.setEnabled(False)
+        self.scan_single_num.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.scan_single_num.valueChanged.connect(self.schedule_processing)
+        mode_layout.addWidget(self.scan_single_num, 1, 1, 1, 2)
+        
+        self.scan_mode_range = QCheckBox("Scan Range:")
+        self.scan_mode_range.setStyleSheet("font-size: 10px;")
+        self.scan_mode_range.stateChanged.connect(self.on_scan_mode_changed)
+        mode_layout.addWidget(self.scan_mode_range, 2, 0)
+        
+        self.scan_range_start = QSpinBox()
+        self.scan_range_start.setRange(0, 9999)
+        self.scan_range_start.setValue(0)
+        self.scan_range_start.setPrefix("From: ")
+        self.scan_range_start.setEnabled(False)
+        self.scan_range_start.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.scan_range_start.valueChanged.connect(self.schedule_processing)
+        mode_layout.addWidget(self.scan_range_start, 2, 1)
+        
+        self.scan_range_end = QSpinBox()
+        self.scan_range_end.setRange(0, 9999)
+        self.scan_range_end.setValue(0)
+        self.scan_range_end.setPrefix("To: ")
+        self.scan_range_end.setEnabled(False)
+        self.scan_range_end.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.scan_range_end.valueChanged.connect(self.schedule_processing)
+        mode_layout.addWidget(self.scan_range_end, 2, 2)
+        
+        scan_range_layout.addLayout(mode_layout)
+        
+        mode_hint = QLabel("Select which scans to process:\n"
+                          "• All Scans: Process all scans in the dataset\n"
+                          "• Single Scan: Process only one specific scan\n"
+                          "• Scan Range: Process a continuous range of scans")
+        mode_hint.setWordWrap(True)
+        mode_hint.setStyleSheet("font-size: 9px; color: #757575; font-style: italic; padding: 8px;")
+        scan_range_layout.addWidget(mode_hint)
+        
+        scan_range_group.setLayout(scan_range_layout)
+        layout.addWidget(scan_range_group)
+        
+        # Quality filtering group
+        quality_group = QGroupBox("Quality-Based Filtering")
+        quality_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #424242;
+            }
+        """)
+        quality_layout = QVBoxLayout()
+        quality_layout.setSpacing(10)
+        
+        # Enable filtering checkbox
+        self.enable_scan_filter = QCheckBox("Enable Good Scans Filtering")
+        self.enable_scan_filter.setChecked(False)
+        self.enable_scan_filter.setStyleSheet("""
+            QCheckBox {
+                font-size: 10px;
+                font-weight: bold;
+                padding: 4px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+            }
+        """)
+        self.enable_scan_filter.stateChanged.connect(self.on_scan_filter_toggle)
+        quality_layout.addWidget(self.enable_scan_filter)
+        
+        # Description
+        filter_desc = QLabel(
+            "Quality filtering uses residual analysis to identify and keep only the best quality scans. "
+            "Each scan is compared to a reference scan, and scans with large deviations are filtered out."
+        )
+        filter_desc.setWordWrap(True)
+        filter_desc.setStyleSheet("font-size: 9px; color: #757575; padding: 4px;")
+        quality_layout.addWidget(filter_desc)
+        
+        # Selection info label
+        self.scan_selection_info = QLabel("Using all scans (filtering disabled)")
+        self.scan_selection_info.setWordWrap(True)
+        self.scan_selection_info.setStyleSheet("""
+            QLabel {
+                padding: 10px;
+                background-color: #e8f5e9;
+                border: 1px solid #c8e6c9;
+                border-radius: 5px;
+                color: #2e7d32;
+                font-size: 10px;
+                font-weight: bold;
+            }
+        """)
+        quality_layout.addWidget(self.scan_selection_info)
+        
+        # Button to open interactive selector
+        self.scan_filter_btn = QPushButton("Open Interactive Scan Selector")
+        self.scan_filter_btn.setEnabled(False)
+        self.scan_filter_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7e57c2;
+                color: white;
+                padding: 12px 16px;
+                font-weight: bold;
+                font-size: 11px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #673ab7;
+            }
+            QPushButton:pressed {
+                background-color: #5e35b1;
+            }
+            QPushButton:disabled {
+                background-color: #bdbdbd;
+                color: #757575;
+            }
+        """)
+        self.scan_filter_btn.clicked.connect(self.open_scan_filter_dialog)
+        quality_layout.addWidget(self.scan_filter_btn)
+        
+        filter_hint = QLabel(
+            "Click the button above to open an interactive window where you can:\n"
+            "• View quality metrics for each scan\n"
+            "• Adjust the quality threshold\n"
+            "• Select scans manually if needed\n"
+            "• Save the filtered scan results"
+        )
+        filter_hint.setWordWrap(True)
+        filter_hint.setStyleSheet("font-size: 9px; color: #757575; font-style: italic; padding: 8px;")
+        quality_layout.addWidget(filter_hint)
+        
+        quality_group.setLayout(quality_layout)
+        layout.addWidget(quality_group)
+        
+        layout.addStretch()
+        return tab
+    
     def create_plot_panel(self):
         """Create plot panel with 3 subplots"""
         panel = QWidget()
@@ -1694,13 +1756,54 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq2_layout.addWidget(self.freq2_toolbar)
         freq2_layout.addWidget(self.freq2_canvas)
         
+        # Scan quality plot (if available)
+        if HAS_SCAN_SELECTION:
+            scan_quality_widget = QWidget()
+            scan_quality_widget.setStyleSheet("background-color: white; border: 1px solid #e0e0e0; border-radius: 4px;")
+            scan_quality_layout = QVBoxLayout(scan_quality_widget)
+            scan_quality_layout.setContentsMargins(2, 2, 2, 2)
+            scan_quality_layout.setSpacing(2)
+            
+            # Add maximize button for scan quality
+            scan_quality_header = QHBoxLayout()
+            scan_quality_title = QLabel("Scan Quality Analysis")
+            scan_quality_title.setStyleSheet("font-weight: bold; color: #424242; font-size: 11px;")
+            scan_quality_header.addWidget(scan_quality_title)
+            scan_quality_header.addStretch()
+            self.scan_quality_maximize_btn = QPushButton("Maximize")
+            self.scan_quality_maximize_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #7e57c2;
+                    color: white;
+                    padding: 4px 12px;
+                    font-size: 9px;
+                    border: none;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #673ab7;
+                }
+            """)
+            self.scan_quality_maximize_btn.clicked.connect(lambda: self.maximize_plot('scan_quality'))
+            scan_quality_header.addWidget(self.scan_quality_maximize_btn)
+            scan_quality_layout.addLayout(scan_quality_header)
+            
+            self.scan_quality_canvas = MplCanvas(self, width=10, height=3, dpi=100)
+            self.scan_quality_toolbar = NavigationToolbar(self.scan_quality_canvas, self)
+            scan_quality_layout.addWidget(self.scan_quality_toolbar)
+            scan_quality_layout.addWidget(self.scan_quality_canvas)
+        
         # Add widgets to splitter
         self.plot_splitter.addWidget(time_widget)
         self.plot_splitter.addWidget(freq1_widget)
         self.plot_splitter.addWidget(freq2_widget)
-        
-        # Set equal initial sizes
-        self.plot_splitter.setSizes([333, 333, 334])
+        if HAS_SCAN_SELECTION:
+            self.plot_splitter.addWidget(scan_quality_widget)
+            # Set equal initial sizes for 4 plots
+            self.plot_splitter.setSizes([250, 250, 250, 250])
+        else:
+            # Set equal initial sizes for 3 plots
+            self.plot_splitter.setSizes([333, 333, 334])
         
         layout.addWidget(self.plot_splitter)
         
@@ -2091,6 +2194,78 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq2_canvas.fig.tight_layout()
         self.freq2_canvas.draw()
+        
+        # Scan quality plot
+        if HAS_SCAN_SELECTION and hasattr(self, 'scan_quality_canvas'):
+            self.update_scan_quality_plot()
+    
+    def update_scan_quality_plot(self):
+        """Update scan quality analysis plot"""
+        if not HAS_SCAN_SELECTION or not hasattr(self, 'scan_quality_canvas'):
+            return
+        
+        self.scan_quality_canvas.axes.clear()
+        
+        if self.scan_api is None or not hasattr(self.scan_api, 'selector'):
+            # No data yet
+            self.scan_quality_canvas.axes.text(0.5, 0.5, 
+                                              'Load data to view scan quality analysis', 
+                                              ha='center', va='center', fontsize=10, color='gray',
+                                              transform=self.scan_quality_canvas.axes.transAxes)
+            self.scan_quality_canvas.axes.set_title('Scan Quality Analysis', fontsize=11, fontweight='bold')
+            self.scan_quality_canvas.draw()
+            return
+        
+        try:
+            metrics = self.scan_api.selector.metrics
+            scan_numbers = np.arange(1, len(metrics.residuals) + 1)
+            residuals = metrics.residuals
+            
+            # Get selected scans if filtering is enabled
+            selected_scans = self.scan_api.get_selected_scans() if self.scan_filtering_enabled else []
+            
+            # Plot bars
+            bars_rejected = self.scan_quality_canvas.axes.bar(scan_numbers, residuals, 
+                                                             color='lightcoral', alpha=0.7, 
+                                                             label='Rejected' if len(selected_scans) > 0 else 'All Scans')
+            
+            # Highlight selected scans in green
+            if len(selected_scans) > 0:
+                selected_residuals = [residuals[s-1] if s <= len(residuals) else 0 for s in selected_scans]
+                bars_selected = self.scan_quality_canvas.axes.bar(selected_scans, selected_residuals, 
+                                                                 color='lightgreen', alpha=0.9, 
+                                                                 label=f'Selected ({len(selected_scans)} scans)')
+            
+            # Draw threshold line
+            if hasattr(metrics, 'threshold'):
+                self.scan_quality_canvas.axes.axhline(y=metrics.threshold, 
+                                                     color='blue', linestyle='--', linewidth=2, 
+                                                     label=f'Threshold: {metrics.threshold:.2e}')
+            
+            self.scan_quality_canvas.axes.set_xlabel('Scan Number', fontsize=10, fontweight='bold')
+            self.scan_quality_canvas.axes.set_ylabel('Residual (Lower = Better Quality)', fontsize=10, fontweight='bold')
+            
+            # Title based on filtering state
+            if self.scan_filtering_enabled and len(selected_scans) > 0:
+                title = f'Scan Quality Analysis (Using {len(selected_scans)}/{len(residuals)} Scans)'
+            else:
+                title = f'Scan Quality Analysis ({len(residuals)} Total Scans)'
+            self.scan_quality_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
+            
+            self.scan_quality_canvas.axes.legend(fontsize=9, loc='upper right')
+            self.scan_quality_canvas.axes.grid(True, alpha=0.3, linestyle='--', axis='y')
+            self.scan_quality_canvas.fig.tight_layout()
+            self.scan_quality_canvas.draw()
+            
+        except Exception as e:
+            # Show error message
+            self.scan_quality_canvas.axes.text(0.5, 0.5, 
+                                              f'Error displaying scan quality:\n{str(e)}', 
+                                              ha='center', va='center', fontsize=9, color='red',
+                                              transform=self.scan_quality_canvas.axes.transAxes)
+            self.scan_quality_canvas.axes.set_title('Scan Quality Analysis (Error)', fontsize=11, fontweight='bold')
+            self.scan_quality_canvas.draw()
+            print(f"Error updating scan quality plot: {e}")
     
     def calculate_metrics(self):
         """Calculate and display metrics"""
@@ -2394,6 +2569,46 @@ class EnhancedNMRProcessingUI(QMainWindow):
             canvas.fig.tight_layout()
             canvas.draw()
         
+        elif plot_type == 'scan_quality' and HAS_SCAN_SELECTION and self.scan_api is not None:
+            # Get quality metrics from scan API
+            try:
+                metrics = self.scan_api.selector.metrics if hasattr(self.scan_api, 'selector') else None
+                if metrics is not None:
+                    scan_numbers = np.arange(1, len(metrics.residuals) + 1)
+                    residuals = metrics.residuals
+                    selected_scans = self.scan_api.get_selected_scans() if self.scan_filtering_enabled else []
+                    
+                    canvas.axes.clear()
+                    # Plot all scans
+                    canvas.axes.bar(scan_numbers, residuals, color='lightcoral', alpha=0.7, label='Rejected')
+                    # Highlight selected scans
+                    if len(selected_scans) > 0:
+                        selected_residuals = [residuals[s-1] if s <= len(residuals) else 0 for s in selected_scans]
+                        canvas.axes.bar(selected_scans, selected_residuals, color='lightgreen', alpha=0.9, label='Selected')
+                    
+                    # Draw threshold line
+                    if hasattr(metrics, 'threshold'):
+                        canvas.axes.axhline(y=metrics.threshold, color='blue', linestyle='--', linewidth=2, label=f'Threshold: {metrics.threshold:.2e}')
+                    
+                    canvas.axes.set_xlabel('Scan Number', fontsize=12, fontweight='bold')
+                    canvas.axes.set_ylabel('Residual (Quality Metric)', fontsize=12, fontweight='bold')
+                    canvas.axes.set_title('Scan Quality Analysis (Lower is Better)', fontsize=14, fontweight='bold')
+                    canvas.axes.legend(fontsize=10)
+                    canvas.axes.grid(True, alpha=0.3, linestyle='--', axis='y')
+                    canvas.fig.tight_layout()
+                    canvas.draw()
+                else:
+                    canvas.axes.clear()
+                    canvas.axes.text(0.5, 0.5, 'No scan quality data available.\nProcess data first.', 
+                                   ha='center', va='center', fontsize=12, color='gray')
+                    canvas.axes.set_title('Scan Quality Analysis', fontsize=14, fontweight='bold')
+                    canvas.draw()
+            except Exception as e:
+                canvas.axes.clear()
+                canvas.axes.text(0.5, 0.5, f'Error displaying scan quality:\n{str(e)}', 
+                               ha='center', va='center', fontsize=10, color='red')
+                canvas.draw()
+        
         # Close button
         close_btn = QPushButton("Close")
         close_btn.setStyleSheet("""
@@ -2539,19 +2754,28 @@ class EnhancedNMRProcessingUI(QMainWindow):
     @Slot()
     def on_scan_filter_toggle(self, state):
         """Handle scan filter checkbox toggle"""
-        if not HAS_SCAN_SELECTION or self.scan_api is None:
+        if not HAS_SCAN_SELECTION:
             return
         
         enabled = (state == Qt.Checked)
         self.scan_filtering_enabled = enabled
-        self.scan_api.enable_filtering(enabled)
+        
+        # Enable/disable the button based on checkbox state
         self.scan_filter_btn.setEnabled(enabled)
         
-        # Update info display
-        self.update_scan_selection_info()
-        
-        # Reprocess with new scan selection
-        self.process_data()
+        # If scan_api exists, update its filtering state
+        if self.scan_api is not None:
+            self.scan_api.enable_filtering(enabled)
+            # Update info display
+            self.update_scan_selection_info()
+            # Reprocess with new scan selection
+            self.process_data()
+        else:
+            # If no data loaded yet, just update the info label
+            if enabled:
+                self.scan_selection_info.setText("Please load data first to use scan filtering")
+            else:
+                self.scan_selection_info.setText("Using all scans (filtering disabled)")
     
     @Slot()
     def open_scan_filter_dialog(self):
@@ -2639,6 +2863,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     font-size: 10px;
                 }}
             """)
+        
+        # Update the scan quality plot
+        if hasattr(self, 'scan_quality_canvas'):
+            self.update_scan_quality_plot()
     
     def get_selected_scans_data(self):
         """
