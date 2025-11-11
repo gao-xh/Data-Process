@@ -2459,45 +2459,76 @@ class EnhancedNMRProcessingUI(QMainWindow):
     
     def load_data_with_scan_selection(self):
         """
-        Load data based on scan range selection mode.
-        Returns averaged FID data according to selected scan range.
+        Load data based on scan range selection mode and quality filtering.
+        Two-step process:
+        1. Load scans based on range selection (All/Single/Range)
+        2. Apply good scans filtering if enabled
+        Returns averaged FID data.
         """
         if not HAS_NMRDUINO or self.current_path is None:
             return self.halp
         
         try:
-            # Determine which scans to load based on mode
-            if self.scan_mode_all.isChecked():
-                # All scans mode (default)
-                scans_to_load = 0  # 0 means all scans in nmrduino_util
-            elif self.scan_mode_single.isChecked():
-                # Single scan mode
-                scan_num = self.scan_single_num.value()
-                scans_to_load = scan_num + 1  # nmrduino_util uses 1-indexed
-            elif self.scan_mode_range.isChecked():
-                # Range mode
-                start = self.scan_range_start.value()
-                end = self.scan_range_end.value()
-                if start > end:
-                    start, end = end, start
-                # nmrduino_util uses 1-indexed and inclusive range
-                scans_to_load = [start + 1, end + 1]
+            # Step 1: Determine scan range to load
+            if HAS_SCAN_SELECTION:
+                if self.scan_mode_all.isChecked():
+                    # All scans mode (default)
+                    scans_to_load = 0  # 0 means all scans in nmrduino_util
+                elif self.scan_mode_single.isChecked():
+                    # Single scan mode
+                    scan_num = self.scan_single_num.value()
+                    scans_to_load = scan_num + 1  # nmrduino_util uses 1-indexed
+                elif self.scan_mode_range.isChecked():
+                    # Range mode
+                    start = self.scan_range_start.value()
+                    end = self.scan_range_end.value()
+                    if start > end:
+                        start, end = end, start
+                    # nmrduino_util uses 1-indexed and inclusive range
+                    scans_to_load = [start + 1, end + 1]
+                else:
+                    # Fallback to all scans
+                    scans_to_load = 0
             else:
-                # Fallback to all scans
                 scans_to_load = 0
             
             # Load data with selected scan range
             compiled = nmr_util.nmrduino_dat_interp(self.current_path, scans_to_load, nowarn=True)
             processing_data = compiled[0]
             
-            # If scan filtering is also enabled, apply it
+            # Step 2: Apply good scans filtering if enabled
             if HAS_SCAN_SELECTION and self.scan_filtering_enabled and self.scan_api:
-                processing_data = self.get_selected_scans_data()
+                try:
+                    # Get list of good scan numbers from quality filter
+                    selected_scans = self.scan_api.get_selected_scans()
+                    
+                    if len(selected_scans) == 0:
+                        print("Warning: No scans pass quality filter, using unfiltered data")
+                        return processing_data
+                    
+                    # Reload only the good scans
+                    scan_data = []
+                    for scan_num in selected_scans:
+                        # Load individual scan (1-indexed)
+                        scan_compiled = nmr_util.nmrduino_dat_interp(
+                            self.current_path, scan_num + 1, nowarn=True)
+                        scan_data.append(scan_compiled[0])
+                    
+                    if len(scan_data) > 0:
+                        # Average the good scans
+                        processing_data = np.mean(scan_data, axis=0)
+                        print(f"Using {len(scan_data)} good scans after quality filtering")
+                    
+                except Exception as e:
+                    print(f"Warning: Error applying scan quality filter: {e}")
+                    # Continue with unfiltered data
             
             return processing_data
             
         except Exception as e:
             print(f"Warning: Error loading data with scan selection: {e}")
+            import traceback
+            traceback.print_exc()
             # Fallback to original data
             return self.halp
     
@@ -2525,20 +2556,35 @@ class EnhancedNMRProcessingUI(QMainWindow):
     @Slot()
     def open_scan_filter_dialog(self):
         """Open interactive scan filter selection window"""
-        if not HAS_SCAN_SELECTION or self.scan_api is None:
+        if not HAS_SCAN_SELECTION:
+            QMessageBox.warning(self, "Feature Not Available", 
+                              "Scan selection feature is not available.\n"
+                              "Please ensure fid_select_refactored module is installed.")
+            return
+        
+        if self.scan_api is None:
+            QMessageBox.warning(self, "Not Initialized", 
+                              "Scan selection not initialized.\n"
+                              "Please load data first.")
             return
         
         try:
+            print("Opening interactive scan selector...")
             # Open interactive selector window (blocking)
             self.scan_api.open_interactive_selector()
             
+            print("Scan selector closed, updating selection info...")
             # After user closes window, update info and reprocess
             self.update_scan_selection_info()
             self.process_data()
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error opening scan filter dialog:\n{error_details}")
             QMessageBox.warning(self, "Scan Filter Error", 
-                              f"Failed to open scan filter dialog:\n{e}")
+                              f"Failed to open scan filter dialog:\n{str(e)}\n\n"
+                              f"Check console for detailed error message.")
     
     def update_scan_selection_info(self):
         """Update scan selection info display"""
@@ -2596,40 +2642,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
     
     def get_selected_scans_data(self):
         """
-        Get data from selected scans for processing.
-        Returns averaged FID data.
+        Deprecated: This method is now handled by load_data_with_scan_selection()
+        Kept for compatibility.
         """
-        if not HAS_SCAN_SELECTION or self.scan_api is None or not self.scan_filtering_enabled:
-            # Return original averaged data
-            return self.halp
-        
-        try:
-            # Get selected scan numbers
-            selected_scans = self.scan_api.get_selected_scans()
-            
-            if len(selected_scans) == 0:
-                QMessageBox.warning(self, "No Scans Selected", 
-                                  "No scans pass the current filter threshold.\n"
-                                  "Please adjust the filter or disable filtering.")
-                return self.halp
-            
-            # Load and average selected scans
-            scan_data = []
-            for scan_num in selected_scans:
-                data = self.scan_api.data_loader.load_scan(scan_num)
-                if data:
-                    scan_data.append(data.time_data)
-            
-            if len(scan_data) == 0:
-                return self.halp
-            
-            # Average selected scans
-            averaged_fid = np.mean(scan_data, axis=0)
-            return averaged_fid
-            
-        except Exception as e:
-            print(f"Warning: Error loading selected scans, using all scans: {e}")
-            return self.halp
+        return self.load_data_with_scan_selection()
 
 
 def main():
