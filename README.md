@@ -105,116 +105,114 @@ See `docs/` folder for detailed documentation:
 - `scripts/`: Standalone processing scripts
 - `notebooks/`: Original Jupyter notebook workflows
 
-## License
-
-This project is for research and educational purposes.
+## Processing Workflow
 
 ```
-文件/实时/数组
+File/Live/Array Data
     ↓
 DataInterface → NMRData
     ↓
-Savgol滤波 (baseline reduction)
+Savgol Filtering (baseline reduction)
     ↓
-截断 (truncate time domain)
+Truncation (remove edges)
     ↓
-窗函数 (apodization/line broadening)
+Apodization (T2* exponential weighting)
     ↓
 Zero Filling
     ↓
-FFT → 频域
+FFT → Frequency Domain
     ↓
-相位校正
+Phase Correction
     ↓
-高斯/洛伦兹展宽
+Gaussian/Lorentzian Broadening
     ↓
-基线校正
+Baseline Correction
     ↓
-归一化
+Normalization
     ↓
-最终谱图
+Final Spectrum
 ```
 
-## 🎓 最佳实践
+## Best Practices
 
-### 1. 参数调优顺序
+### 1. Parameter Optimization Order
 
-1. **Savgol window**: 从小到大尝试（21, 51, 101...），观察baseline
-2. **截断**: 去除首尾噪声点
-3. **Apodization T2**: 根据期望线宽调整
-4. **Zero filling**: 通常2-4倍
-5. **相位**: 手动调整或自动算法
-6. **展宽**: 根据分辨率需求
-7. **基线**: 最后校正
+1. **Savgol window**: Try from small to large (21, 51, 101...), observe baseline
+2. **Truncation**: Remove noise at edges
+3. **Apodization T2**: Adjust based on desired linewidth
+4. **Zero filling**: Typically 2-4x
+5. **Phase**: Manual adjustment or automatic algorithm
+6. **Broadening**: Based on resolution requirements
+7. **Baseline**: Final correction
 
-### 2. 实时监控建议
+### 2. Real-time Monitoring Tips
 
-- **Poll interval**: 根据采集速度调整，通常0.5-2秒
-- **Average mode**: 低信噪比实验使用累积平均
-- **Single mode**: 检查scan质量或动态过程
+- **Poll interval**: Adjust based on acquisition speed, typically 0.5-2 seconds
+- **Average mode**: Use cumulative averaging for low SNR experiments
+- **Single mode**: Check scan quality or dynamic processes
 
-### 3. Bad Scan筛选策略
+### 3. Bad Scan Filtering Strategy
 
 ```python
-# 保守策略（保留更多scan）
+# Conservative (keep more scans)
 threshold = selector.auto_threshold_suggestion('percentile', percentile=90)
 
-# 激进策略（质量优先）
+# Aggressive (quality first)
 threshold = selector.auto_threshold_suggestion('sigma', sigma_multiplier=2)
 
-# 中等策略
+# Moderate
 threshold = selector.auto_threshold_suggestion('percentile', percentile=75)
 ```
 
-## 🐛 故障排除
+## Troubleshooting
 
-### Q: 实时监控检测不到新文件？
-**A**: 检查：
-1. 文件夹路径是否正确
-2. 文件名格式是否为 `{scan}.dat`
-3. `poll_interval` 是否太长
-4. 文件写入是否完成
+### Q: Real-time monitor not detecting new files?
+**A**: Check:
+1. Folder path is correct
+2. Filename format is `{scan}.dat`
+3. `poll_interval` is not too long
+4. File writing is complete
 
-### Q: SNR计算不准确？
-**A**: 调整：
-1. `peak_range` 确保包含主峰
-2. `noise_range` 远离信号区域
-3. 使用 `detailed=True` 查看peak和noise值
+### Q: SNR calculation inaccurate?
+**A**: Adjust:
+1. `peak_range` to include main peak
+2. `noise_range` away from signal region
+3. Use `detailed=True` to view peak and noise values
 
-### Q: 参数改变后效果不明显？
-**A**: 检查：
-1. 参数范围是否合理
-2. 是否需要级联其他参数
-3. 数据质量是否足够
+### Q: Parameter changes not obvious?
+**A**: Check:
+1. Parameter range is reasonable
+2. May need to cascade other parameters
+3. Data quality is sufficient
 
-## 📈 性能优化
+## Performance Optimization
 
-- **大数据集**: 使用`zero_fill_factor`而非手动填充
-- **实时监控**: 调整`poll_interval`平衡响应速度和CPU使用
-- **批处理**: 考虑使用多进程处理多个实验
+- **Large datasets**: Use `zero_fill_factor` instead of manual filling
+- **Real-time monitoring**: Adjust `poll_interval` to balance response speed and CPU usage
+- **Batch processing**: Consider multiprocessing for multiple experiments
 
-## 🔮 未来计划
+## Future Plans
 
-- [ ] Lorentzian拟合
-- [ ] SVD滤波
-- [ ] Matrix Pencil分析
-- [ ] 多核并行处理
-- [ ] 完整UI程序
-- [ ] 单元测试套件
+- [ ] Lorentzian fitting
+- [ ] SVD filtering
+- [ ] Matrix Pencil analysis
+- [ ] Multi-core parallel processing
+- [ ] Complete UI program
+- [ ] Unit test suite
 
-## 📄 许可证
+## License
 
-MIT License
+MIT License - See LICENSE file for details
 
-## 📞 支持
+## Support
 
-如有问题或建议：
-- 查看 `ARCHITECTURE.md` 了解设计思路
-- 查看 `FEATURE_LIST.md` 了解所有功能
-- 查看 `examples/` 目录获取完整示例
+For questions or suggestions:
+- Check `ARCHITECTURE.md` for design details
+- Check `FEATURE_LIST.md` for all features
+- See `examples/` directory for complete examples
 
 ---
 
-**版本**: 1.0.0  
-**更新**: 2025-01-08  
-**状态**: ✅ 核心功能库完成，实时监控已添加
+**Version**: 1.0.0  
+**Last Updated**: November 2025  
+**Status**: Core functionality complete, real-time monitoring added
