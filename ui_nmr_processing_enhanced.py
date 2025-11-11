@@ -168,9 +168,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_count = 0
         self.current_path = None
         
-        # Scan selection API
+        # Scan selection API (enabled by default)
         self.scan_api = None
-        self.scan_filtering_enabled = False
+        self.scan_filtering_enabled = True  # Always enabled
         
         # Processing results
         self.processed = None
@@ -1541,44 +1541,32 @@ class EnhancedNMRProcessingUI(QMainWindow):
             }
         """)
         quality_layout = QVBoxLayout()
-        quality_layout.setSpacing(10)
+        quality_layout.setSpacing(12)
         
-        # Enable filtering checkbox
-        self.enable_scan_filter = QCheckBox("Enable Good Scans Filtering")
-        self.enable_scan_filter.setChecked(False)
-        self.enable_scan_filter.setStyleSheet("""
-            QCheckBox {
-                font-size: 10px;
-                font-weight: bold;
-                padding: 4px;
-            }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-        """)
-        self.enable_scan_filter.stateChanged.connect(self.on_scan_filter_toggle)
-        quality_layout.addWidget(self.enable_scan_filter)
+        # Title and description
+        title_label = QLabel("Good Scans Filtering (Always Enabled)")
+        title_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #7e57c2; padding: 4px;")
+        quality_layout.addWidget(title_label)
         
-        # Description
         filter_desc = QLabel(
             "Quality filtering uses residual analysis to identify and keep only the best quality scans. "
-            "Each scan is compared to a reference scan, and scans with large deviations are filtered out."
+            "Each scan is compared to a reference scan, and scans with large deviations are filtered out. "
+            "This feature is always active to ensure optimal data quality."
         )
         filter_desc.setWordWrap(True)
-        filter_desc.setStyleSheet("font-size: 9px; color: #757575; padding: 4px;")
+        filter_desc.setStyleSheet("font-size: 9px; color: #757575; padding: 4px; margin-bottom: 8px;")
         quality_layout.addWidget(filter_desc)
         
         # Selection info label
-        self.scan_selection_info = QLabel("Using all scans (filtering disabled)")
+        self.scan_selection_info = QLabel("Load data to view scan quality analysis")
         self.scan_selection_info.setWordWrap(True)
         self.scan_selection_info.setStyleSheet("""
             QLabel {
                 padding: 10px;
-                background-color: #e8f5e9;
-                border: 1px solid #c8e6c9;
+                background-color: #e3f2fd;
+                border: 1px solid #90caf9;
                 border-radius: 5px;
-                color: #2e7d32;
+                color: #1976d2;
                 font-size: 10px;
                 font-weight: bold;
             }
@@ -1587,7 +1575,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Button to open interactive selector
         self.scan_filter_btn = QPushButton("Open Interactive Scan Selector")
-        self.scan_filter_btn.setEnabled(False)
+        self.scan_filter_btn.setEnabled(False)  # Will be enabled after loading data
         self.scan_filter_btn.setStyleSheet("""
             QPushButton {
                 background-color: #7e57c2;
@@ -2049,19 +2037,24 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 self.scan_range_end.setMaximum(self.scan_count - 1)
                 self.scan_range_end.setValue(self.scan_count - 1)
             
-            # Initialize scan selection API
+            # Initialize scan selection API (always enabled)
             if HAS_SCAN_SELECTION:
                 try:
                     self.scan_api = ScanSelectionAPI(folder, verbose=False)
                     self.scan_api.setup_quality_analysis()  # Use first scan as reference by default
-                    self.scan_api.enable_filtering(False)  # Default: disabled
-                    self.scan_filtering_enabled = False
-                    if hasattr(self, 'enable_scan_filter'):
-                        self.enable_scan_filter.setChecked(False)
+                    self.scan_api.enable_filtering(True)  # Always enabled
+                    self.scan_filtering_enabled = True
+                    
+                    # Enable the interactive selector button
+                    if hasattr(self, 'scan_filter_btn'):
+                        self.scan_filter_btn.setEnabled(True)
+                    
                     self.update_scan_selection_info()
+                    print(f"✓ Scan quality filtering initialized and enabled")
                 except Exception as e:
                     print(f"Warning: Failed to initialize scan selection: {e}")
                     self.scan_api = None
+                    self.scan_filtering_enabled = False
             
             # Auto process
             self.process_data()
@@ -2763,38 +2756,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
     # ========================================================================
     
     @Slot()
-    def on_scan_filter_toggle(self, state):
-        """Handle scan filter checkbox toggle"""
-        if not HAS_SCAN_SELECTION:
-            print("WARNING: Scan selection feature not available")
-            return
-        
-        enabled = (state == Qt.Checked)
-        self.scan_filtering_enabled = enabled
-        
-        print(f"DEBUG: Scan filter toggle - enabled={enabled}, scan_api={'exists' if self.scan_api else 'None'}")
-        
-        # Enable/disable the button based on checkbox state
-        if hasattr(self, 'scan_filter_btn'):
-            self.scan_filter_btn.setEnabled(enabled)
-            print(f"DEBUG: Button enabled state set to {enabled}")
-        
-        # If scan_api exists, update its filtering state
-        if self.scan_api is not None:
-            self.scan_api.enable_filtering(enabled)
-            # Update info display
-            self.update_scan_selection_info()
-            # Reprocess with new scan selection
-            self.process_data()
-        else:
-            # If no data loaded yet, just update the info label
-            if hasattr(self, 'scan_selection_info'):
-                if enabled:
-                    self.scan_selection_info.setText("Please load data first to use scan filtering")
-                else:
-                    self.scan_selection_info.setText("Using all scans (filtering disabled)")
-    
-    @Slot()
     def open_scan_filter_dialog(self):
         """Open interactive scan filter selection window"""
         if not HAS_SCAN_SELECTION:
@@ -2828,25 +2789,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
                               f"Check console for detailed error message.")
     
     def update_scan_selection_info(self):
-        """Update scan selection info display"""
+        """Update scan selection info display (filtering always enabled)"""
         if not HAS_SCAN_SELECTION or self.scan_api is None or not hasattr(self, 'scan_selection_info'):
             return
         
         info = self.scan_api.get_selection_info()
         
-        if not info['filtering_enabled']:
-            self.scan_selection_info.setText("Using all scans (filtering disabled)")
-            self.scan_selection_info.setStyleSheet("""
-                QLabel {
-                    padding: 8px;
-                    background-color: #e3f2fd;
-                    border: 1px solid #90caf9;
-                    border-radius: 5px;
-                    color: #1976d2;
-                    font-size: 10px;
-                }
-            """)
-        else:
+        # Always show filtering status (since it's always enabled)
+        if info['filtering_enabled']:
             selected = info['selection_count']
             total = info['total_scans']
             rate = info['selection_rate']
