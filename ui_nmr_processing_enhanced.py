@@ -38,7 +38,7 @@ from scipy.fft import fft
 
 # Import nmrduino_util
 try:
-    import nmrduino_util as nmr_util
+    from nmr_processing_lib import nmrduino_util as nmr_util
     HAS_NMRDUINO = True
 except:
     HAS_NMRDUINO = False
@@ -46,7 +46,7 @@ except:
 
 # Import scan selection API
 try:
-    from fid_select_refactored import ScanSelectionAPI
+    from nmr_processing_lib.quality.fid_select_refactored import ScanSelectionAPI
     HAS_SCAN_SELECTION = True
 except:
     HAS_SCAN_SELECTION = False
