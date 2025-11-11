@@ -2755,13 +2755,17 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def on_scan_filter_toggle(self, state):
         """Handle scan filter checkbox toggle"""
         if not HAS_SCAN_SELECTION:
+            print("WARNING: Scan selection feature not available")
             return
         
         enabled = (state == Qt.Checked)
         self.scan_filtering_enabled = enabled
         
+        print(f"DEBUG: Scan filter toggle - enabled={enabled}, scan_api={'exists' if self.scan_api else 'None'}")
+        
         # Enable/disable the button based on checkbox state
         self.scan_filter_btn.setEnabled(enabled)
+        print(f"DEBUG: Button enabled state set to {enabled}")
         
         # If scan_api exists, update its filtering state
         if self.scan_api is not None:
