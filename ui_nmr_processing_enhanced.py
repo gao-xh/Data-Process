@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QSlider, QSpinBox, QDoubleSpinBox,
     QGroupBox, QCheckBox, QRadioButton, QFileDialog, QTextEdit, QMessageBox,
     QGridLayout, QTabWidget, QProgressBar, QComboBox, QSplitter,
-    QScrollArea, QMenuBar, QMenu
+    QScrollArea, QMenuBar, QMenu, QInputDialog, QLineEdit
 )
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSettings
 from PySide6.QtGui import QFont
@@ -1638,8 +1638,37 @@ class EnhancedNMRProcessingUI(QMainWindow):
         hint_text.setStyleSheet("font-size: 9px; color: #757575; font-style: italic; padding: 8px; background-color: #fffde7; border-radius: 3px;")
         threshold_layout.addWidget(hint_text)
         
-        # Button row
+        # Button row (3 buttons)
         button_layout = QHBoxLayout()
+        
+        # Input Rate button
+        self.input_rate_btn = QPushButton("⌨️ Input Exact Rate")
+        self.input_rate_btn.setEnabled(False)
+        self.input_rate_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ff9800;
+                color: white;
+                padding: 10px 16px;
+                font-weight: bold;
+                font-size: 10px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #f57c00;
+            }
+            QPushButton:pressed {
+                background-color: #ef6c00;
+            }
+            QPushButton:disabled {
+                background-color: #bdbdbd;
+                color: #757575;
+            }
+        """)
+        self.input_rate_btn.clicked.connect(self.input_exact_selection_rate)
+        button_layout.addWidget(self.input_rate_btn)
+        
+        # Apply button
         
         # Apply button
         self.apply_threshold_btn = QPushButton("🔄 Apply & Reprocess")
@@ -2186,6 +2215,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
                         self.quality_rate_slider.setEnabled(True)
                     if hasattr(self, 'quality_threshold_slider'):
                         self.quality_threshold_slider.setEnabled(True)
+                    if hasattr(self, 'input_rate_btn'):
+                        self.input_rate_btn.setEnabled(True)
                     if hasattr(self, 'apply_threshold_btn'):
                         self.apply_threshold_btn.setEnabled(True)
                     if hasattr(self, 'save_selection_btn'):
@@ -3007,6 +3038,49 @@ class EnhancedNMRProcessingUI(QMainWindow):
             QMessageBox.warning(self, "Threshold Error", 
                               f"Failed to apply quality threshold:\n{str(e)}\n\n"
                               f"Check console for detailed error message.")
+    
+    @Slot()
+    def input_exact_selection_rate(self):
+        """Allow user to input exact selection rate percentage"""
+        if not HAS_SCAN_SELECTION or self.scan_api is None:
+            QMessageBox.warning(self, "Not Available", 
+                              "Scan selection not available.\n"
+                              "Please load data first.")
+            return
+        
+        try:
+            # Get current selection rate
+            info = self.scan_api.get_selection_info()
+            current_rate = info['selection_rate']
+            
+            # Show input dialog
+            rate_str, ok = QInputDialog.getText(
+                self, 
+                "Input Selection Rate",
+                f"Enter desired selection rate (0-100%):\n\nCurrent: {current_rate:.2f}%",
+                QLineEdit.Normal,
+                f"{current_rate:.1f}"
+            )
+            
+            if ok and rate_str:
+                try:
+                    rate = float(rate_str)
+                    if 0 <= rate <= 100:
+                        # Update slider (which will trigger the valueChanged event)
+                        if hasattr(self, 'quality_rate_slider'):
+                            self.quality_rate_slider.setValue(int(rate))
+                            print(f"✅ Selection rate set to: {rate}%")
+                            # Auto-apply
+                            self.apply_quality_threshold()
+                    else:
+                        QMessageBox.warning(self, "Invalid Input", 
+                                          f"Rate must be between 0 and 100.\nGot: {rate}")
+                except ValueError:
+                    QMessageBox.warning(self, "Invalid Input", 
+                                      f"Invalid number format: {rate_str}")
+        except Exception as e:
+            print(f"❌ Error inputting selection rate: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to input selection rate:\n{str(e)}")
     
     @Slot()
     def save_scan_selection(self):
