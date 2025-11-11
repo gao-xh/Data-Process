@@ -515,6 +515,58 @@ class EnhancedNMRProcessingUI(QMainWindow):
             scan_layout = QVBoxLayout()
             scan_layout.setSpacing(8)
             
+            # Scan range selection
+            scan_range_layout = QGridLayout()
+            scan_range_layout.setSpacing(8)
+            
+            scan_mode_label = QLabel("Scan Range Mode:")
+            scan_mode_label.setStyleSheet("font-size: 10px; font-weight: bold; color: #424242;")
+            scan_range_layout.addWidget(scan_mode_label, 0, 0, 1, 3)
+            
+            self.scan_mode_all = QCheckBox("All Scans (Default)")
+            self.scan_mode_all.setChecked(True)
+            self.scan_mode_all.setStyleSheet("font-size: 10px;")
+            self.scan_mode_all.stateChanged.connect(self.on_scan_mode_changed)
+            scan_range_layout.addWidget(self.scan_mode_all, 1, 0, 1, 3)
+            
+            self.scan_mode_single = QCheckBox("Single Scan:")
+            self.scan_mode_single.setStyleSheet("font-size: 10px;")
+            self.scan_mode_single.stateChanged.connect(self.on_scan_mode_changed)
+            scan_range_layout.addWidget(self.scan_mode_single, 2, 0)
+            
+            self.scan_single_num = QSpinBox()
+            self.scan_single_num.setRange(0, 9999)
+            self.scan_single_num.setValue(0)
+            self.scan_single_num.setEnabled(False)
+            self.scan_single_num.setStyleSheet("font-size: 10px; padding: 4px;")
+            self.scan_single_num.valueChanged.connect(self.schedule_processing)
+            scan_range_layout.addWidget(self.scan_single_num, 2, 1, 1, 2)
+            
+            self.scan_mode_range = QCheckBox("Scan Range:")
+            self.scan_mode_range.setStyleSheet("font-size: 10px;")
+            self.scan_mode_range.stateChanged.connect(self.on_scan_mode_changed)
+            scan_range_layout.addWidget(self.scan_mode_range, 3, 0)
+            
+            self.scan_range_start = QSpinBox()
+            self.scan_range_start.setRange(0, 9999)
+            self.scan_range_start.setValue(0)
+            self.scan_range_start.setPrefix("From: ")
+            self.scan_range_start.setEnabled(False)
+            self.scan_range_start.setStyleSheet("font-size: 10px; padding: 4px;")
+            self.scan_range_start.valueChanged.connect(self.schedule_processing)
+            scan_range_layout.addWidget(self.scan_range_start, 3, 1)
+            
+            self.scan_range_end = QSpinBox()
+            self.scan_range_end.setRange(0, 9999)
+            self.scan_range_end.setValue(0)
+            self.scan_range_end.setPrefix("To: ")
+            self.scan_range_end.setEnabled(False)
+            self.scan_range_end.setStyleSheet("font-size: 10px; padding: 4px;")
+            self.scan_range_end.valueChanged.connect(self.schedule_processing)
+            scan_range_layout.addWidget(self.scan_range_end, 3, 2)
+            
+            scan_layout.addLayout(scan_range_layout)
+            
             # Enable filtering checkbox
             self.enable_scan_filter = QCheckBox("Enable Good Scans Filtering")
             self.enable_scan_filter.setChecked(False)
@@ -523,6 +575,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     font-size: 10px;
                     font-weight: normal;
                     padding: 4px;
+                    margin-top: 8px;
                 }
                 QCheckBox::indicator {
                     width: 16px;
@@ -1407,6 +1460,110 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq_group.setLayout(freq_layout)
         layout.addWidget(freq_group)
         
+        # SNR Calculation Range
+        snr_group = QGroupBox("SNR Calculation Range")
+        snr_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 11px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #d32f2f;
+            }
+        """)
+        snr_layout = QGridLayout()
+        snr_layout.setSpacing(10)
+        snr_layout.setContentsMargins(12, 15, 12, 12)
+        
+        # Auto/Manual toggle
+        snr_mode_layout = QHBoxLayout()
+        self.snr_auto_mode = QCheckBox("Auto Detect Signal/Noise Range")
+        self.snr_auto_mode.setChecked(True)
+        self.snr_auto_mode.setStyleSheet("""
+            QCheckBox {
+                font-size: 10px;
+                color: #424242;
+                font-weight: bold;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox::indicator:unchecked {
+                border: 2px solid #bdbdbd;
+                border-radius: 3px;
+                background: white;
+            }
+            QCheckBox::indicator:checked {
+                border: 2px solid #d32f2f;
+                border-radius: 3px;
+                background: #d32f2f;
+            }
+        """)
+        self.snr_auto_mode.stateChanged.connect(self.on_snr_mode_changed)
+        snr_mode_layout.addWidget(self.snr_auto_mode)
+        snr_mode_layout.addStretch()
+        snr_layout.addLayout(snr_mode_layout, 0, 0, 1, 3)
+        
+        # Signal range
+        signal_range_title = QLabel("Signal Range:")
+        signal_range_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        snr_layout.addWidget(signal_range_title, 1, 0)
+        self.snr_signal_min = QDoubleSpinBox()
+        self.snr_signal_min.setRange(0, 1000)
+        self.snr_signal_min.setValue(215)
+        self.snr_signal_min.setSuffix(" Hz")
+        self.snr_signal_min.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.snr_signal_min.setEnabled(False)
+        self.snr_signal_min.valueChanged.connect(self.schedule_processing)
+        snr_layout.addWidget(self.snr_signal_min, 1, 1)
+        self.snr_signal_max = QDoubleSpinBox()
+        self.snr_signal_max.setRange(0, 1000)
+        self.snr_signal_max.setValue(225)
+        self.snr_signal_max.setSuffix(" Hz")
+        self.snr_signal_max.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.snr_signal_max.setEnabled(False)
+        self.snr_signal_max.valueChanged.connect(self.schedule_processing)
+        snr_layout.addWidget(self.snr_signal_max, 1, 2)
+        
+        # Noise range
+        noise_range_title = QLabel("Noise Range:")
+        noise_range_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        snr_layout.addWidget(noise_range_title, 2, 0)
+        self.snr_noise_min = QDoubleSpinBox()
+        self.snr_noise_min.setRange(0, 1000)
+        self.snr_noise_min.setValue(180)
+        self.snr_noise_min.setSuffix(" Hz")
+        self.snr_noise_min.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.snr_noise_min.setEnabled(False)
+        self.snr_noise_min.valueChanged.connect(self.schedule_processing)
+        snr_layout.addWidget(self.snr_noise_min, 2, 1)
+        self.snr_noise_max = QDoubleSpinBox()
+        self.snr_noise_max.setRange(0, 1000)
+        self.snr_noise_max.setValue(200)
+        self.snr_noise_max.setSuffix(" Hz")
+        self.snr_noise_max.setStyleSheet("font-size: 10px; padding: 4px;")
+        self.snr_noise_max.setEnabled(False)
+        self.snr_noise_max.valueChanged.connect(self.schedule_processing)
+        snr_layout.addWidget(self.snr_noise_max, 2, 2)
+        
+        snr_hint = QLabel("Auto mode: Detects peak and uses far regions for noise.\n"
+                         "Manual mode: Specify exact frequency ranges for SNR calculation.")
+        snr_hint.setWordWrap(True)
+        snr_hint.setStyleSheet("font-size: 9px; color: #757575; font-style: italic;")
+        snr_layout.addWidget(snr_hint, 3, 0, 1, 3)
+        
+        snr_group.setLayout(snr_layout)
+        layout.addWidget(snr_group)
+        
         layout.addStretch()
         return tab
     
@@ -1639,6 +1796,55 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def on_param_changed(self):
         self.schedule_processing()
     
+    @Slot()
+    def on_scan_mode_changed(self, state):
+        """Handle scan range mode changes"""
+        sender = self.sender()
+        
+        if sender == self.scan_mode_all and state == Qt.Checked:
+            # All scans mode
+            self.scan_mode_single.setChecked(False)
+            self.scan_mode_range.setChecked(False)
+            self.scan_single_num.setEnabled(False)
+            self.scan_range_start.setEnabled(False)
+            self.scan_range_end.setEnabled(False)
+        elif sender == self.scan_mode_single and state == Qt.Checked:
+            # Single scan mode
+            self.scan_mode_all.setChecked(False)
+            self.scan_mode_range.setChecked(False)
+            self.scan_single_num.setEnabled(True)
+            self.scan_range_start.setEnabled(False)
+            self.scan_range_end.setEnabled(False)
+        elif sender == self.scan_mode_range and state == Qt.Checked:
+            # Range mode
+            self.scan_mode_all.setChecked(False)
+            self.scan_mode_single.setChecked(False)
+            self.scan_single_num.setEnabled(False)
+            self.scan_range_start.setEnabled(True)
+            self.scan_range_end.setEnabled(True)
+        
+        # If all are unchecked, revert to "All Scans"
+        if not any([self.scan_mode_all.isChecked(), 
+                   self.scan_mode_single.isChecked(), 
+                   self.scan_mode_range.isChecked()]):
+            self.scan_mode_all.setChecked(True)
+            return
+        
+        # Reprocess with new scan selection
+        self.schedule_processing()
+    
+    @Slot()
+    def on_snr_mode_changed(self, state):
+        """Handle SNR mode toggle between auto and manual"""
+        auto_mode = (state == Qt.Checked)
+        # Enable/disable manual range inputs
+        self.snr_signal_min.setEnabled(not auto_mode)
+        self.snr_signal_max.setEnabled(not auto_mode)
+        self.snr_noise_min.setEnabled(not auto_mode)
+        self.snr_noise_max.setEnabled(not auto_mode)
+        # Reprocess to update SNR
+        self.schedule_processing()
+    
     def schedule_processing(self):
         """Schedule processing with debounce"""
         if self.halp is not None:
@@ -1731,6 +1937,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.process_btn.setEnabled(True)
             self.save_params_btn.setEnabled(True)
             
+            # Update scan range controls max values
+            if HAS_SCAN_SELECTION:
+                self.scan_single_num.setMaximum(self.scan_count - 1)
+                self.scan_range_start.setMaximum(self.scan_count - 1)
+                self.scan_range_end.setMaximum(self.scan_count - 1)
+                self.scan_range_end.setValue(self.scan_count - 1)
+            
             # Initialize scan selection API
             if HAS_SCAN_SELECTION:
                 try:
@@ -1761,8 +1974,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.worker.stop()
             self.worker.wait()
         
-        # Get data (either filtered scans or all scans)
-        processing_data = self.get_selected_scans_data()
+        # Reload data based on scan range selection
+        processing_data = self.load_data_with_scan_selection()
         
         # Update parameters from UI
         self.params = {
@@ -1903,8 +2116,37 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # SNR calculation
         if HAS_NMRDUINO:
             try:
-                frequency_range_snr = [11, 14]
-                noise_range_snr = [350, 400]
+                # Check if auto mode or manual mode
+                if self.snr_auto_mode.isChecked():
+                    # Auto mode: Automatically determine signal and noise ranges from spectrum
+                    # Signal: Find peak location and use ±5 Hz around it
+                    peak_idx = np.argmax(spectrum_abs)
+                    peak_freq = freq_axis[peak_idx]
+                    frequency_range_snr = [peak_freq - 5, peak_freq + 5]
+                    
+                    # Noise: Use high frequency region far from signal
+                    # Find a quiet region in the upper portion of the spectrum
+                    max_freq = freq_axis[-1]
+                    noise_range_snr = [max_freq * 0.7, max_freq * 0.9]
+                    
+                    # Update UI to show detected ranges (without triggering processing)
+                    self.snr_signal_min.blockSignals(True)
+                    self.snr_signal_max.blockSignals(True)
+                    self.snr_noise_min.blockSignals(True)
+                    self.snr_noise_max.blockSignals(True)
+                    self.snr_signal_min.setValue(frequency_range_snr[0])
+                    self.snr_signal_max.setValue(frequency_range_snr[1])
+                    self.snr_noise_min.setValue(noise_range_snr[0])
+                    self.snr_noise_max.setValue(noise_range_snr[1])
+                    self.snr_signal_min.blockSignals(False)
+                    self.snr_signal_max.blockSignals(False)
+                    self.snr_noise_min.blockSignals(False)
+                    self.snr_noise_max.blockSignals(False)
+                else:
+                    # Manual mode: Use user-specified ranges
+                    frequency_range_snr = [self.snr_signal_min.value(), self.snr_signal_max.value()]
+                    noise_range_snr = [self.snr_noise_min.value(), self.snr_noise_max.value()]
+                
                 snr = nmr_util.snr_calc(freq_axis, spectrum_abs, 
                                        frequency_range_snr, noise_range_snr)
                 
@@ -2214,6 +2456,50 @@ class EnhancedNMRProcessingUI(QMainWindow):
         plot_splitter_state = self.settings.value('plot_splitter')
         if plot_splitter_state:
             self.plot_splitter.restoreState(plot_splitter_state)
+    
+    def load_data_with_scan_selection(self):
+        """
+        Load data based on scan range selection mode.
+        Returns averaged FID data according to selected scan range.
+        """
+        if not HAS_NMRDUINO or self.current_path is None:
+            return self.halp
+        
+        try:
+            # Determine which scans to load based on mode
+            if self.scan_mode_all.isChecked():
+                # All scans mode (default)
+                scans_to_load = 0  # 0 means all scans in nmrduino_util
+            elif self.scan_mode_single.isChecked():
+                # Single scan mode
+                scan_num = self.scan_single_num.value()
+                scans_to_load = scan_num + 1  # nmrduino_util uses 1-indexed
+            elif self.scan_mode_range.isChecked():
+                # Range mode
+                start = self.scan_range_start.value()
+                end = self.scan_range_end.value()
+                if start > end:
+                    start, end = end, start
+                # nmrduino_util uses 1-indexed and inclusive range
+                scans_to_load = [start + 1, end + 1]
+            else:
+                # Fallback to all scans
+                scans_to_load = 0
+            
+            # Load data with selected scan range
+            compiled = nmr_util.nmrduino_dat_interp(self.current_path, scans_to_load, nowarn=True)
+            processing_data = compiled[0]
+            
+            # If scan filtering is also enabled, apply it
+            if HAS_SCAN_SELECTION and self.scan_filtering_enabled and self.scan_api:
+                processing_data = self.get_selected_scans_data()
+            
+            return processing_data
+            
+        except Exception as e:
+            print(f"Warning: Error loading data with scan selection: {e}")
+            # Fallback to original data
+            return self.halp
     
     # ========================================================================
     # Scan Selection Methods
