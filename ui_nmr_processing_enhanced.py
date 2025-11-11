@@ -20,7 +20,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QSlider, QSpinBox, QDoubleSpinBox,
-    QGroupBox, QCheckBox, QFileDialog, QTextEdit, QMessageBox,
+    QGroupBox, QCheckBox, QRadioButton, QFileDialog, QTextEdit, QMessageBox,
     QGridLayout, QTabWidget, QProgressBar, QComboBox, QSplitter,
     QScrollArea, QMenuBar, QMenu
 )
@@ -1463,19 +1463,19 @@ class EnhancedNMRProcessingUI(QMainWindow):
         scan_range_layout = QVBoxLayout()
         scan_range_layout.setSpacing(8)
         
-        # Mode selection
+        # Mode selection - using QRadioButton for mutual exclusion
         mode_layout = QGridLayout()
         mode_layout.setSpacing(8)
         
-        self.scan_mode_all = QCheckBox("All Scans (Default)")
+        self.scan_mode_all = QRadioButton("All Scans (Default)")
         self.scan_mode_all.setChecked(True)
         self.scan_mode_all.setStyleSheet("font-size: 10px; font-weight: bold;")
-        self.scan_mode_all.stateChanged.connect(self.on_scan_mode_changed)
+        self.scan_mode_all.toggled.connect(self.on_scan_mode_changed)
         mode_layout.addWidget(self.scan_mode_all, 0, 0, 1, 3)
         
-        self.scan_mode_single = QCheckBox("Single Scan:")
+        self.scan_mode_single = QRadioButton("Single Scan:")
         self.scan_mode_single.setStyleSheet("font-size: 10px;")
-        self.scan_mode_single.stateChanged.connect(self.on_scan_mode_changed)
+        self.scan_mode_single.toggled.connect(self.on_scan_mode_changed)
         mode_layout.addWidget(self.scan_mode_single, 1, 0)
         
         self.scan_single_num = QSpinBox()
@@ -1486,9 +1486,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_single_num.valueChanged.connect(self.schedule_processing)
         mode_layout.addWidget(self.scan_single_num, 1, 1, 1, 2)
         
-        self.scan_mode_range = QCheckBox("Scan Range:")
+        self.scan_mode_range = QRadioButton("Scan Range:")
         self.scan_mode_range.setStyleSheet("font-size: 10px;")
-        self.scan_mode_range.stateChanged.connect(self.on_scan_mode_changed)
+        self.scan_mode_range.toggled.connect(self.on_scan_mode_changed)
         mode_layout.addWidget(self.scan_mode_range, 2, 0)
         
         self.scan_range_start = QSpinBox()
@@ -1679,8 +1679,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         time_header.addWidget(self.time_maximize_btn)
         time_layout.addLayout(time_header)
         
-        self.time_canvas = MplCanvas(self, width=10, height=3, dpi=100)
+        self.time_canvas = MplCanvas(self, width=10, height=2.5, dpi=100)
         self.time_toolbar = NavigationToolbar(self.time_canvas, self)
+        self.time_toolbar.setStyleSheet("QToolBar { border: none; padding: 2px; }")
         time_layout.addWidget(self.time_toolbar)
         time_layout.addWidget(self.time_canvas)
         
@@ -1715,8 +1716,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq1_header.addWidget(self.freq1_maximize_btn)
         freq1_layout.addLayout(freq1_header)
         
-        self.freq1_canvas = MplCanvas(self, width=10, height=3, dpi=100)
+        self.freq1_canvas = MplCanvas(self, width=10, height=2.5, dpi=100)
         self.freq1_toolbar = NavigationToolbar(self.freq1_canvas, self)
+        self.freq1_toolbar.setStyleSheet("QToolBar { border: none; padding: 2px; }")
         freq1_layout.addWidget(self.freq1_toolbar)
         freq1_layout.addWidget(self.freq1_canvas)
         
@@ -1751,8 +1753,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq2_header.addWidget(self.freq2_maximize_btn)
         freq2_layout.addLayout(freq2_header)
         
-        self.freq2_canvas = MplCanvas(self, width=10, height=3, dpi=100)
+        self.freq2_canvas = MplCanvas(self, width=10, height=2.5, dpi=100)
         self.freq2_toolbar = NavigationToolbar(self.freq2_canvas, self)
+        self.freq2_toolbar.setStyleSheet("QToolBar { border: none; padding: 2px; }")
         freq2_layout.addWidget(self.freq2_toolbar)
         freq2_layout.addWidget(self.freq2_canvas)
         
@@ -1788,8 +1791,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
             scan_quality_header.addWidget(self.scan_quality_maximize_btn)
             scan_quality_layout.addLayout(scan_quality_header)
             
-            self.scan_quality_canvas = MplCanvas(self, width=10, height=3, dpi=100)
+            self.scan_quality_canvas = MplCanvas(self, width=10, height=2.5, dpi=100)
             self.scan_quality_toolbar = NavigationToolbar(self.scan_quality_canvas, self)
+            self.scan_quality_toolbar.setStyleSheet("QToolBar { border: none; padding: 2px; }")
             scan_quality_layout.addWidget(self.scan_quality_toolbar)
             scan_quality_layout.addWidget(self.scan_quality_canvas)
         
@@ -1900,38 +1904,36 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.schedule_processing()
     
     @Slot()
-    def on_scan_mode_changed(self, state):
-        """Handle scan range mode changes"""
+    def on_scan_mode_changed(self, checked):
+        """Handle scan range mode changes (QRadioButton auto-handles mutual exclusion)"""
+        if not checked:
+            # Ignore unchecked signal, only process checked signal
+            return
+        
         sender = self.sender()
         
-        if sender == self.scan_mode_all and state == Qt.Checked:
-            # All scans mode
-            self.scan_mode_single.setChecked(False)
-            self.scan_mode_range.setChecked(False)
-            self.scan_single_num.setEnabled(False)
-            self.scan_range_start.setEnabled(False)
-            self.scan_range_end.setEnabled(False)
-        elif sender == self.scan_mode_single and state == Qt.Checked:
-            # Single scan mode
-            self.scan_mode_all.setChecked(False)
-            self.scan_mode_range.setChecked(False)
-            self.scan_single_num.setEnabled(True)
-            self.scan_range_start.setEnabled(False)
-            self.scan_range_end.setEnabled(False)
-        elif sender == self.scan_mode_range and state == Qt.Checked:
-            # Range mode
-            self.scan_mode_all.setChecked(False)
-            self.scan_mode_single.setChecked(False)
-            self.scan_single_num.setEnabled(False)
-            self.scan_range_start.setEnabled(True)
-            self.scan_range_end.setEnabled(True)
-        
-        # If all are unchecked, revert to "All Scans"
-        if not any([self.scan_mode_all.isChecked(), 
-                   self.scan_mode_single.isChecked(), 
-                   self.scan_mode_range.isChecked()]):
-            self.scan_mode_all.setChecked(True)
-            return
+        # Enable/disable corresponding input controls
+        if sender == self.scan_mode_all:
+            # All scans mode - disable all inputs
+            if hasattr(self, 'scan_single_num'):
+                self.scan_single_num.setEnabled(False)
+            if hasattr(self, 'scan_range_start'):
+                self.scan_range_start.setEnabled(False)
+                self.scan_range_end.setEnabled(False)
+        elif sender == self.scan_mode_single:
+            # Single scan mode - enable single scan input
+            if hasattr(self, 'scan_single_num'):
+                self.scan_single_num.setEnabled(True)
+            if hasattr(self, 'scan_range_start'):
+                self.scan_range_start.setEnabled(False)
+                self.scan_range_end.setEnabled(False)
+        elif sender == self.scan_mode_range:
+            # Range mode - enable range inputs
+            if hasattr(self, 'scan_single_num'):
+                self.scan_single_num.setEnabled(False)
+            if hasattr(self, 'scan_range_start'):
+                self.scan_range_start.setEnabled(True)
+                self.scan_range_end.setEnabled(True)
         
         # Reprocess with new scan selection
         self.schedule_processing()
@@ -2147,53 +2149,59 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Time domain
         time_axis = np.linspace(0, acq_time, len(time_data))
         self.time_canvas.axes.clear()
-        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'k-', linewidth=0.5, alpha=0.8)
-        self.time_canvas.axes.set_xlabel('Time (s)', fontsize=10, fontweight='bold')
-        self.time_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.time_canvas.axes.set_title('Time Domain Signal (After Processing)', fontsize=11, fontweight='bold')
-        self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
-        self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)  # Auto-scale Y axis
-        self.time_canvas.fig.tight_layout()
+        self.time_canvas.axes.plot(time_axis, np.real(time_data), color='#2c3e50', linewidth=0.7, alpha=0.9)
+        self.time_canvas.axes.set_xlabel('Time (s)', fontsize=9, fontweight='bold', color='#424242')
+        self.time_canvas.axes.set_ylabel('Amplitude', fontsize=9, fontweight='bold', color='#424242')
+        self.time_canvas.axes.set_title('Time Domain Signal', fontsize=10, fontweight='bold', color='#1976d2', pad=8)
+        self.time_canvas.axes.grid(True, alpha=0.25, linestyle='--', linewidth=0.5)
+        self.time_canvas.axes.spines['top'].set_visible(False)
+        self.time_canvas.axes.spines['right'].set_visible(False)
+        self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)
+        self.time_canvas.fig.tight_layout(pad=1.5)
         self.time_canvas.draw()
         
         # Frequency domain - low freq (plot all data, but set view range)
         freq_range_low = [self.freq_low_min.value(), self.freq_low_max.value()]
         
         self.freq1_canvas.axes.clear()
-        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=0.8)
-        self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])  # Set initial view range
+        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), color='#1976d2', linewidth=0.9, alpha=0.9)
+        self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         # Auto-scale Y based on visible data in the X range
         idx_visible = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
         if np.any(idx_visible):
             y_visible = np.abs(spectrum)[idx_visible]
             y_max = np.max(y_visible)
-            self.freq1_canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
-        self.freq1_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
-        self.freq1_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.freq1_canvas.axes.set_title(f'Low Frequency Spectrum (View: {freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', 
-                                         fontsize=11, fontweight='bold')
-        self.freq1_canvas.axes.grid(True, alpha=0.3, linestyle='--')
-        self.freq1_canvas.fig.tight_layout()
+            self.freq1_canvas.axes.set_ylim(-0.02 * y_max, 1.08 * y_max)
+        self.freq1_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=9, fontweight='bold', color='#424242')
+        self.freq1_canvas.axes.set_ylabel('Amplitude', fontsize=9, fontweight='bold', color='#424242')
+        self.freq1_canvas.axes.set_title(f'Low Frequency ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', 
+                                         fontsize=10, fontweight='bold', color='#1976d2', pad=8)
+        self.freq1_canvas.axes.grid(True, alpha=0.25, linestyle='--', linewidth=0.5)
+        self.freq1_canvas.axes.spines['top'].set_visible(False)
+        self.freq1_canvas.axes.spines['right'].set_visible(False)
+        self.freq1_canvas.fig.tight_layout(pad=1.5)
         self.freq1_canvas.draw()
         
         # Frequency domain - high freq (plot all data, but set view range)
         freq_range_high = [self.freq_high_min.value(), self.freq_high_max.value()]
         
         self.freq2_canvas.axes.clear()
-        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), 'r-', linewidth=0.8)
-        self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])  # Set initial view range
+        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), color='#d32f2f', linewidth=0.9, alpha=0.9)
+        self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
         # Auto-scale Y based on visible data in the X range
         idx_visible = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
         if np.any(idx_visible):
             y_visible = np.abs(spectrum)[idx_visible]
             y_max = np.max(y_visible)
-            self.freq2_canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
-        self.freq2_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
-        self.freq2_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.freq2_canvas.axes.set_title(f'High Frequency Spectrum (View: {freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', 
-                                         fontsize=11, fontweight='bold')
-        self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
-        self.freq2_canvas.fig.tight_layout()
+            self.freq2_canvas.axes.set_ylim(-0.02 * y_max, 1.08 * y_max)
+        self.freq2_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=9, fontweight='bold', color='#424242')
+        self.freq2_canvas.axes.set_ylabel('Amplitude', fontsize=9, fontweight='bold', color='#424242')
+        self.freq2_canvas.axes.set_title(f'High Frequency ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', 
+                                         fontsize=10, fontweight='bold', color='#d32f2f', pad=8)
+        self.freq2_canvas.axes.grid(True, alpha=0.25, linestyle='--', linewidth=0.5)
+        self.freq2_canvas.axes.spines['top'].set_visible(False)
+        self.freq2_canvas.axes.spines['right'].set_visible(False)
+        self.freq2_canvas.fig.tight_layout(pad=1.5)
         self.freq2_canvas.draw()
         
         # Scan quality plot
@@ -2225,37 +2233,39 @@ class EnhancedNMRProcessingUI(QMainWindow):
             # Get selected scans if filtering is enabled
             selected_scans = self.scan_api.get_selected_scans() if self.scan_filtering_enabled else []
             
-            # Plot bars
+            # Plot bars with improved colors
             bars_rejected = self.scan_quality_canvas.axes.bar(scan_numbers, residuals, 
-                                                             color='lightcoral', alpha=0.7, 
+                                                             color='#ffcdd2', alpha=0.8, edgecolor='#e57373', linewidth=0.5,
                                                              label='Rejected' if len(selected_scans) > 0 else 'All Scans')
             
             # Highlight selected scans in green
             if len(selected_scans) > 0:
                 selected_residuals = [residuals[s-1] if s <= len(residuals) else 0 for s in selected_scans]
                 bars_selected = self.scan_quality_canvas.axes.bar(selected_scans, selected_residuals, 
-                                                                 color='lightgreen', alpha=0.9, 
+                                                                 color='#81c784', alpha=0.9, edgecolor='#4caf50', linewidth=0.5,
                                                                  label=f'Selected ({len(selected_scans)} scans)')
             
             # Draw threshold line
             if hasattr(metrics, 'threshold'):
                 self.scan_quality_canvas.axes.axhline(y=metrics.threshold, 
-                                                     color='blue', linestyle='--', linewidth=2, 
-                                                     label=f'Threshold: {metrics.threshold:.2e}')
+                                                     color='#1976d2', linestyle='--', linewidth=1.5, 
+                                                     label=f'Threshold: {metrics.threshold:.2e}', alpha=0.8)
             
-            self.scan_quality_canvas.axes.set_xlabel('Scan Number', fontsize=10, fontweight='bold')
-            self.scan_quality_canvas.axes.set_ylabel('Residual (Lower = Better Quality)', fontsize=10, fontweight='bold')
+            self.scan_quality_canvas.axes.set_xlabel('Scan Number', fontsize=9, fontweight='bold', color='#424242')
+            self.scan_quality_canvas.axes.set_ylabel('Residual (Lower = Better)', fontsize=9, fontweight='bold', color='#424242')
             
             # Title based on filtering state
             if self.scan_filtering_enabled and len(selected_scans) > 0:
-                title = f'Scan Quality Analysis (Using {len(selected_scans)}/{len(residuals)} Scans)'
+                title = f'Scan Quality ({len(selected_scans)}/{len(residuals)} Selected)'
             else:
-                title = f'Scan Quality Analysis ({len(residuals)} Total Scans)'
-            self.scan_quality_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
+                title = f'Scan Quality ({len(residuals)} Total)'
+            self.scan_quality_canvas.axes.set_title(title, fontsize=10, fontweight='bold', color='#7e57c2', pad=8)
             
-            self.scan_quality_canvas.axes.legend(fontsize=9, loc='upper right')
-            self.scan_quality_canvas.axes.grid(True, alpha=0.3, linestyle='--', axis='y')
-            self.scan_quality_canvas.fig.tight_layout()
+            self.scan_quality_canvas.axes.legend(fontsize=8, loc='upper right', framealpha=0.95)
+            self.scan_quality_canvas.axes.grid(True, alpha=0.25, linestyle='--', axis='y', linewidth=0.5)
+            self.scan_quality_canvas.axes.spines['top'].set_visible(False)
+            self.scan_quality_canvas.axes.spines['right'].set_visible(False)
+            self.scan_quality_canvas.fig.tight_layout(pad=1.5)
             self.scan_quality_canvas.draw()
             
         except Exception as e:
