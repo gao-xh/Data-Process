@@ -2041,7 +2041,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.save_params_btn.setEnabled(True)
             
             # Update scan range controls max values
-            if HAS_SCAN_SELECTION:
+            if HAS_SCAN_SELECTION and hasattr(self, 'scan_single_num'):
                 self.scan_single_num.setMaximum(self.scan_count - 1)
                 self.scan_range_start.setMaximum(self.scan_count - 1)
                 self.scan_range_end.setMaximum(self.scan_count - 1)
@@ -2054,7 +2054,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     self.scan_api.setup_quality_analysis()  # Use first scan as reference by default
                     self.scan_api.enable_filtering(False)  # Default: disabled
                     self.scan_filtering_enabled = False
-                    self.enable_scan_filter.setChecked(False)
+                    if hasattr(self, 'enable_scan_filter'):
+                        self.enable_scan_filter.setChecked(False)
                     self.update_scan_selection_info()
                 except Exception as e:
                     print(f"Warning: Failed to initialize scan selection: {e}")
@@ -2685,7 +2686,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         try:
             # Step 1: Determine scan range to load
-            if HAS_SCAN_SELECTION:
+            if HAS_SCAN_SELECTION and hasattr(self, 'scan_mode_all'):
                 if self.scan_mode_all.isChecked():
                     # All scans mode (default)
                     scans_to_load = 0  # 0 means all scans in nmrduino_util
@@ -2764,8 +2765,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         print(f"DEBUG: Scan filter toggle - enabled={enabled}, scan_api={'exists' if self.scan_api else 'None'}")
         
         # Enable/disable the button based on checkbox state
-        self.scan_filter_btn.setEnabled(enabled)
-        print(f"DEBUG: Button enabled state set to {enabled}")
+        if hasattr(self, 'scan_filter_btn'):
+            self.scan_filter_btn.setEnabled(enabled)
+            print(f"DEBUG: Button enabled state set to {enabled}")
         
         # If scan_api exists, update its filtering state
         if self.scan_api is not None:
@@ -2776,10 +2778,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.process_data()
         else:
             # If no data loaded yet, just update the info label
-            if enabled:
-                self.scan_selection_info.setText("Please load data first to use scan filtering")
-            else:
-                self.scan_selection_info.setText("Using all scans (filtering disabled)")
+            if hasattr(self, 'scan_selection_info'):
+                if enabled:
+                    self.scan_selection_info.setText("Please load data first to use scan filtering")
+                else:
+                    self.scan_selection_info.setText("Using all scans (filtering disabled)")
     
     @Slot()
     def open_scan_filter_dialog(self):
@@ -2816,7 +2819,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
     
     def update_scan_selection_info(self):
         """Update scan selection info display"""
-        if not HAS_SCAN_SELECTION or self.scan_api is None:
+        if not HAS_SCAN_SELECTION or self.scan_api is None or not hasattr(self, 'scan_selection_info'):
             return
         
         info = self.scan_api.get_selection_info()
