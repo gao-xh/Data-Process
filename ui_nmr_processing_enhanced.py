@@ -1576,6 +1576,33 @@ class EnhancedNMRProcessingUI(QMainWindow):
         ref_layout.addWidget(ref_hint)
         quality_layout.addLayout(ref_layout)
         
+        # Initialize button (shown until quality analysis is done)
+        self.initialize_quality_btn = QPushButton("Initialize Quality Analysis")
+        self.initialize_quality_btn.setEnabled(False)
+        self.initialize_quality_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196f3;
+                color: white;
+                padding: 12px 16px;
+                font-weight: bold;
+                font-size: 11px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1976d2;
+            }
+            QPushButton:pressed {
+                background-color: #1565c0;
+            }
+            QPushButton:disabled {
+                background-color: #bdbdbd;
+                color: #757575;
+            }
+        """)
+        self.initialize_quality_btn.clicked.connect(self.initialize_quality_analysis)
+        quality_layout.addWidget(self.initialize_quality_btn)
+        
         # Selection info label
         self.scan_selection_info = QLabel("Load data to view scan quality analysis")
         self.scan_selection_info.setWordWrap(True)
@@ -1981,6 +2008,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
             
             self.plot_tabs.addTab(quality_tab, "Scan Quality")
         
+        # Connect tab change signal to auto-initialize quality analysis
+        self.plot_tabs.currentChanged.connect(self.on_plot_tab_changed)
+        
         layout.addWidget(self.plot_tabs)
         
         return panel
@@ -2221,12 +2251,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 self.scan_range_end.setMaximum(self.scan_count - 1)
                 self.scan_range_end.setValue(self.scan_count - 1)
             
-            # Initialize scan selection API (always enabled)
+            # Initialize scan selection API (defer quality analysis until needed)
             if HAS_SCAN_SELECTION:
                 try:
                     self.scan_api = ScanSelectionAPI(folder, verbose=False)
                     
-                    # Populate reference scan combo box with available scans
+                    # Populate reference scan combo box with available scans (lightweight)
                     if hasattr(self, 'reference_scan_combo'):
                         self.reference_scan_combo.blockSignals(True)
                         # Keep first two items (First Scan, Average)
@@ -2234,33 +2264,31 @@ class EnhancedNMRProcessingUI(QMainWindow):
                             self.reference_scan_combo.removeItem(2)
                         # Add individual scan options
                         available_scans = self.scan_api.get_all_scans()
-                        for scan_num in available_scans[:20]:  # Limit to first 20 to avoid clutter
+                        for scan_num in available_scans[:min(10, len(available_scans))]:  # Show first 10 only
                             self.reference_scan_combo.addItem(f"Scan #{scan_num}", scan_num)
-                        if len(available_scans) > 20:
-                            self.reference_scan_combo.addItem(f"... ({len(available_scans)} total)", None)
+                        if len(available_scans) > 10:
+                            self.reference_scan_combo.addItem(f"... ({len(available_scans)} total scans)", None)
                         self.reference_scan_combo.setEnabled(True)
                         self.reference_scan_combo.blockSignals(False)
                     
-                    # Setup with default reference (first scan)
-                    self.scan_api.setup_quality_analysis()  # Use first scan as reference by default
-                    self.scan_api.enable_filtering(True)  # Always enabled
-                    self.scan_filtering_enabled = True
+                    # DON'T run quality analysis yet - it's slow!
+                    # Will be triggered when user switches to Scan Quality tab
+                    self.scan_filtering_enabled = False  # Start disabled
+                    self.scan_quality_initialized = False  # Flag to track if analysis is done
                     
-                    # Enable all threshold controls
-                    if hasattr(self, 'quality_rate_slider'):
-                        self.quality_rate_slider.setEnabled(True)
-                    if hasattr(self, 'quality_threshold_slider'):
-                        self.quality_threshold_slider.setEnabled(True)
-                    if hasattr(self, 'input_rate_btn'):
-                        self.input_rate_btn.setEnabled(True)
-                    if hasattr(self, 'apply_threshold_btn'):
-                        self.apply_threshold_btn.setEnabled(True)
-                    if hasattr(self, 'save_selection_btn'):
-                        self.save_selection_btn.setEnabled(True)
+                    # Enable initialize button
+                    if hasattr(self, 'initialize_quality_btn'):
+                        self.initialize_quality_btn.setEnabled(True)
                     
-                    self.update_scan_selection_info()
-                    self.update_scan_quality_plot()  # Update the scatter plot
-                    print(f"✓ Scan quality filtering initialized and enabled")
+                    # Keep controls disabled until quality analysis is run
+                    print(f"✓ Scan selection API initialized (quality analysis deferred)")
+                    
+                    # Update info to show it's not ready yet
+                    if hasattr(self, 'scan_selection_info'):
+                        self.scan_selection_info.setText(
+                            "Quality analysis not yet performed.\n"
+                            "Click 'Initialize Quality Analysis' or switch to 'Scan Quality' tab to start."
+                        )
                 except Exception as e:
                     print(f"Warning: Failed to initialize scan selection: {e}")
                     self.scan_api = None
@@ -2980,6 +3008,79 @@ class EnhancedNMRProcessingUI(QMainWindow):
     # ========================================================================
     # Scan Selection Methods
     # ========================================================================
+    
+    @Slot()
+    def on_plot_tab_changed(self, index):
+        """Handle plot tab change - auto-initialize quality analysis if needed"""
+        if not HAS_SCAN_SELECTION:
+            return
+        
+        # Check if user switched to Scan Quality tab (index 1)
+        tab_text = self.plot_tabs.tabText(index)
+        if "Scan Quality" in tab_text:
+            # Auto-initialize if not done yet
+            if hasattr(self, 'scan_quality_initialized') and not self.scan_quality_initialized:
+                if self.scan_api is not None:
+                    print("Auto-initializing quality analysis (first time viewing Scan Quality tab)...")
+                    self.initialize_quality_analysis()
+    
+    @Slot()
+    def initialize_quality_analysis(self):
+        """Initialize quality analysis (can be slow for many scans)"""
+        if not HAS_SCAN_SELECTION or self.scan_api is None:
+            return
+        
+        if hasattr(self, 'scan_quality_initialized') and self.scan_quality_initialized:
+            print("Quality analysis already initialized")
+            return
+        
+        try:
+            print("Initializing quality analysis, this may take a moment...")
+            
+            # Show progress in info label
+            if hasattr(self, 'scan_selection_info'):
+                self.scan_selection_info.setText("Analyzing scan quality, please wait...")
+            
+            # Setup with default reference (first scan)
+            self.scan_api.setup_quality_analysis()
+            self.scan_api.enable_filtering(True)
+            self.scan_filtering_enabled = True
+            self.scan_quality_initialized = True
+            
+            # Enable all threshold controls
+            if hasattr(self, 'quality_rate_slider'):
+                self.quality_rate_slider.setEnabled(True)
+            if hasattr(self, 'quality_threshold_slider'):
+                self.quality_threshold_slider.setEnabled(True)
+            if hasattr(self, 'input_rate_btn'):
+                self.input_rate_btn.setEnabled(True)
+            if hasattr(self, 'apply_threshold_btn'):
+                self.apply_threshold_btn.setEnabled(True)
+            if hasattr(self, 'save_selection_btn'):
+                self.save_selection_btn.setEnabled(True)
+            
+            # Hide/disable initialize button
+            if hasattr(self, 'initialize_quality_btn'):
+                self.initialize_quality_btn.setEnabled(False)
+                self.initialize_quality_btn.setText("Quality Analysis Ready")
+            
+            # Update display
+            self.update_scan_selection_info()
+            self.update_scan_quality_plot()
+            
+            print("✓ Scan quality filtering initialized and enabled")
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"ERROR: Failed to initialize quality analysis:\n{error_details}")
+            
+            if hasattr(self, 'scan_selection_info'):
+                self.scan_selection_info.setText(f"Error initializing quality analysis:\n{str(e)}")
+            
+            QMessageBox.warning(self, "Initialization Error", 
+                              f"Failed to initialize quality analysis:\n{str(e)}\n\n"
+                              f"Check console for detailed error message.")
     
     @Slot()
     def on_reference_scan_changed(self, index):
