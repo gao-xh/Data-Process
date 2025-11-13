@@ -36,9 +36,9 @@ from matplotlib.figure import Figure
 import scipy.signal
 from scipy.fft import fft
 
-# Import nmrduino_util
+# Import nmrduino_util (using fixed version with proper path handling)
 try:
-    from nmr_processing_lib import nmrduino_util as nmr_util
+    from nmr_processing_lib import nmrduino_util_fixed as nmr_util
     HAS_NMRDUINO = True
 except:
     HAS_NMRDUINO = False
@@ -521,7 +521,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_single_num.setMinimum(0)
         self.scan_single_num.setMaximum(0)
         self.scan_single_num.setEnabled(False)
-        self.scan_single_num.valueChanged.connect(self.schedule_processing)
+        self.scan_single_num.valueChanged.connect(self.on_scan_value_changed)
         mode_layout.addWidget(self.scan_single_num, 1, 1, 1, 2)
         
         self.scan_mode_range = QRadioButton("Scan Range:")
@@ -536,7 +536,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_range_start.setMinimum(0)
         self.scan_range_start.setMaximum(0)
         self.scan_range_start.setEnabled(False)
-        self.scan_range_start.valueChanged.connect(self.schedule_processing)
+        self.scan_range_start.valueChanged.connect(self.on_scan_value_changed)
         range_layout.addWidget(self.scan_range_start)
         
         range_layout.addWidget(QLabel("to"))
@@ -545,12 +545,44 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_range_end.setMinimum(0)
         self.scan_range_end.setMaximum(0)
         self.scan_range_end.setEnabled(False)
-        self.scan_range_end.valueChanged.connect(self.schedule_processing)
+        self.scan_range_end.valueChanged.connect(self.on_scan_value_changed)
         range_layout.addWidget(self.scan_range_end)
         
         mode_layout.addLayout(range_layout, 2, 1, 1, 2)
         
         scan_layout.addLayout(mode_layout)
+        
+        # Apply button
+        apply_scan_btn_layout = QHBoxLayout()
+        apply_scan_btn_layout.addStretch()
+        
+        self.apply_scan_btn = QPushButton("Apply Selection")
+        self.apply_scan_btn.setEnabled(False)
+        self.apply_scan_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 20px;
+                font-weight: bold;
+                font-size: 10px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+            QPushButton:disabled {
+                background-color: #BDBDBD;
+            }
+        """)
+        self.apply_scan_btn.clicked.connect(self.reload_selected_scans)
+        apply_scan_btn_layout.addWidget(self.apply_scan_btn)
+        apply_scan_btn_layout.addStretch()
+        
+        scan_layout.addLayout(apply_scan_btn_layout)
         
         # Info label
         self.scan_selection_info = QLabel("Load data to enable scan selection")
@@ -1421,7 +1453,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         snr_layout.setSpacing(10)
         
         # Signal range
-        signal_label = QLabel("Signal Range (kHz):")
+        signal_label = QLabel("Signal Range (Hz):")
         signal_label.setStyleSheet("font-size: 10px;")
         snr_layout.addWidget(signal_label, 0, 0)
         
@@ -1429,10 +1461,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         signal_range_layout.setSpacing(5)
         
         self.signal_range_min = QDoubleSpinBox()
-        self.signal_range_min.setRange(0, 1000)
-        self.signal_range_min.setValue(11)
-        self.signal_range_min.setDecimals(1)
-        self.signal_range_min.setSingleStep(0.5)
+        self.signal_range_min.setRange(0, 100000)
+        self.signal_range_min.setValue(110)
+        self.signal_range_min.setDecimals(0)
+        self.signal_range_min.setSingleStep(10)
         self.signal_range_min.setStyleSheet("font-size: 10px;")
         self.signal_range_min.valueChanged.connect(self.schedule_processing)
         signal_range_layout.addWidget(self.signal_range_min)
@@ -1440,10 +1472,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         signal_range_layout.addWidget(QLabel("to"))
         
         self.signal_range_max = QDoubleSpinBox()
-        self.signal_range_max.setRange(0, 1000)
-        self.signal_range_max.setValue(14)
-        self.signal_range_max.setDecimals(1)
-        self.signal_range_max.setSingleStep(0.5)
+        self.signal_range_max.setRange(0, 100000)
+        self.signal_range_max.setValue(140)
+        self.signal_range_max.setDecimals(0)
+        self.signal_range_max.setSingleStep(10)
         self.signal_range_max.setStyleSheet("font-size: 10px;")
         self.signal_range_max.valueChanged.connect(self.schedule_processing)
         signal_range_layout.addWidget(self.signal_range_max)
@@ -1451,7 +1483,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         snr_layout.addLayout(signal_range_layout, 0, 1)
         
         # Noise range
-        noise_label = QLabel("Noise Range (kHz):")
+        noise_label = QLabel("Noise Range (Hz):")
         noise_label.setStyleSheet("font-size: 10px;")
         snr_layout.addWidget(noise_label, 1, 0)
         
@@ -1459,10 +1491,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         noise_range_layout.setSpacing(5)
         
         self.noise_range_min = QDoubleSpinBox()
-        self.noise_range_min.setRange(0, 1000)
+        self.noise_range_min.setRange(0, 100000)
         self.noise_range_min.setValue(350)
-        self.noise_range_min.setDecimals(1)
-        self.noise_range_min.setSingleStep(1.0)
+        self.noise_range_min.setDecimals(0)
+        self.noise_range_min.setSingleStep(10)
         self.noise_range_min.setStyleSheet("font-size: 10px;")
         self.noise_range_min.valueChanged.connect(self.schedule_processing)
         noise_range_layout.addWidget(self.noise_range_min)
@@ -1470,10 +1502,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         noise_range_layout.addWidget(QLabel("to"))
         
         self.noise_range_max = QDoubleSpinBox()
-        self.noise_range_max.setRange(0, 1000)
+        self.noise_range_max.setRange(0, 100000)
         self.noise_range_max.setValue(400)
-        self.noise_range_max.setDecimals(1)
-        self.noise_range_max.setSingleStep(1.0)
+        self.noise_range_max.setDecimals(0)
+        self.noise_range_max.setSingleStep(10)
         self.noise_range_max.setStyleSheet("font-size: 10px;")
         self.noise_range_max.valueChanged.connect(self.schedule_processing)
         noise_range_layout.addWidget(self.noise_range_max)
@@ -1736,7 +1768,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.scan_range_start.setEnabled(False)
             self.scan_range_end.setEnabled(False)
             self.update_scan_selection_info()
-            self.schedule_processing()
+            self.reload_selected_scans()
             
         elif sender == self.scan_mode_single:
             # Single scan mode - enable single selector, disable range
@@ -1744,7 +1776,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.scan_range_start.setEnabled(False)
             self.scan_range_end.setEnabled(False)
             self.update_scan_selection_info()
-            self.schedule_processing()
             
         elif sender == self.scan_mode_range:
             # Range mode - enable range selectors, disable single
@@ -1752,7 +1783,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.scan_range_start.setEnabled(True)
             self.scan_range_end.setEnabled(True)
             self.update_scan_selection_info()
-            self.schedule_processing()
+    
+    def on_scan_value_changed(self):
+        """Handle scan number spinbox value changes"""
+        # Update info label only, don't reload until Apply button is clicked
+        self.update_scan_selection_info()
     
     def update_scan_selection_info(self):
         """Update scan selection info label"""
@@ -1813,6 +1848,64 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 return []
         
         return []
+    
+    def reload_selected_scans(self):
+        """Reload data based on selected scan range"""
+        if not hasattr(self, 'current_path') or not self.current_path:
+            return
+        
+        if not HAS_NMRDUINO:
+            print("Warning: Cannot reload scans, nmrduino_util not available")
+            return
+        
+        # Prevent multiple simultaneous reloads
+        if hasattr(self, '_is_reloading') and self._is_reloading:
+            return
+        
+        try:
+            self._is_reloading = True
+            
+            # Determine which scans to load based on selection mode
+            if self.scan_mode_all.isChecked():
+                # Load all scans
+                scan_param = 0
+                status_msg = f"Loading all {self.scan_count} scans..."
+            elif self.scan_mode_single.isChecked():
+                # Load single scan (1-indexed for nmrduino_dat_interp)
+                scan_num = self.scan_single_num.value()
+                scan_param = scan_num + 1
+                status_msg = f"Loading scan #{scan_num}..."
+            elif self.scan_mode_range.isChecked():
+                # Load scan range (1-indexed)
+                start = self.scan_range_start.value()
+                end = self.scan_range_end.value()
+                scan_param = [start + 1, end + 1]
+                num_scans = end - start + 1
+                status_msg = f"Loading scans {start} to {end} ({num_scans} scans)..."
+            else:
+                scan_param = 0
+                status_msg = "Loading scans..."
+            
+            # Show loading message
+            print(status_msg)
+            QApplication.processEvents()  # Update UI
+            
+            # Reload data
+            compiled = nmr_util.nmrduino_dat_interp(self.current_path, scan_param)
+            self.halp = compiled[0]
+            self.sampling_rate = compiled[1]
+            self.acq_time = compiled[2]
+            
+            print(f"Loaded {len(self.halp)} data points")
+            
+            # Process with current parameters
+            self.schedule_processing()
+            
+        except Exception as e:
+            print(f"Error reloading scans: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to reload scans:\n{str(e)}")
+        finally:
+            self._is_reloading = False
     
     def schedule_processing(self):
         """Schedule processing with debounce"""
@@ -1914,9 +2007,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
             
             self.scans_label.setText(str(self.scan_count))
             
-            # Initialize scan selection controls
+            # Initialize scan selection controls (block signals to prevent reload)
             if self.scan_count > 0:
-                # Update spin box ranges
+                # Update spin box ranges without triggering signals
+                self.scan_single_num.blockSignals(True)
+                self.scan_range_start.blockSignals(True)
+                self.scan_range_end.blockSignals(True)
+                
                 self.scan_single_num.setMaximum(self.scan_count - 1)
                 self.scan_single_num.setValue(0)
                 self.scan_range_start.setMaximum(self.scan_count - 1)
@@ -1924,8 +2021,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 self.scan_range_end.setMaximum(self.scan_count - 1)
                 self.scan_range_end.setValue(self.scan_count - 1)
                 
+                # Re-enable signals
+                self.scan_single_num.blockSignals(False)
+                self.scan_range_start.blockSignals(False)
+                self.scan_range_end.blockSignals(False)
+                
                 # Update info label
                 self.update_scan_selection_info()
+                
+                # Enable Apply Selection button
+                self.apply_scan_btn.setEnabled(True)
             
             self.process_btn.setEnabled(True)
             self.save_params_btn.setEnabled(True)
