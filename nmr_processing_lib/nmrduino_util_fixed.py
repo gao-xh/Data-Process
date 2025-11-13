@@ -191,16 +191,6 @@ def snr_calc(xf, yf, peak_freq_range, noise_freq_range, nowarn=False):
     # Calculate noise power (RMS)
     avg_noise_power = np.mean(np.sqrt(np.square(yf_noise_corrected)))
     
-    if not nowarn:
-        print(f"DEBUG: Peak max = {np.max(peak_range):.2f}")
-        print(f"DEBUG: Peak offset = {peak_offset:.2f}")
-        print(f"DEBUG: Peak height (corrected) = {max_val:.2f}")
-        print(f"DEBUG: Noise mean = {np.mean(yf_noise):.2f}")
-        print(f"DEBUG: Noise std = {np.std(yf_noise):.2f}")
-        print(f"DEBUG: Noise RMS (after baseline correction) = {avg_noise_power:.2f}")
-        print(f"DEBUG: Noise corrected mean = {np.mean(yf_noise_corrected):.2f}")
-        print(f"DEBUG: Noise corrected std = {np.std(yf_noise_corrected):.2f}")
-    
     if avg_noise_power == 0:
         if not nowarn:
             print("Warning: Zero noise power")
