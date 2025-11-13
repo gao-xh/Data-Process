@@ -781,55 +781,45 @@ class EnhancedNMRProcessingUI(QMainWindow):
         metrics_grid.setSpacing(12)
         metrics_grid.setContentsMargins(10, 10, 10, 10)
         
-        # SNR
-        snr_title = QLabel("SNR:")
+        # SNR (Total)
+        snr_title = QLabel("SNR (Total):")
         snr_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
         metrics_grid.addWidget(snr_title, 0, 0)
         self.snr_label = QLabel("--")
-        self.snr_label.setStyleSheet("""
-            QLabel {
-                font-size: 24px;
-                font-weight: bold;
-                color: #5c7a99;
-                padding: 5px;
-                background-color: #e8eef4;
-                border-radius: 4px;
-            }
-        """)
+        self.snr_label.setStyleSheet("font-size: 13px; color: #424242; font-weight: bold;")
         metrics_grid.addWidget(self.snr_label, 0, 1)
+        
+        # SNR (Per Scan)
+        snr_per_scan_title = QLabel("SNR (Per Scan):")
+        snr_per_scan_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
+        metrics_grid.addWidget(snr_per_scan_title, 1, 0)
+        self.snr_per_scan_label = QLabel("--")
+        self.snr_per_scan_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: normal;")
+        metrics_grid.addWidget(self.snr_per_scan_label, 1, 1)
         
         # Peak height
         peak_title = QLabel("Peak:")
         peak_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
         metrics_grid.addWidget(peak_title, 0, 2)
         self.peak_label = QLabel("--")
-        self.peak_label.setStyleSheet("""
-            QLabel {
-                font-size: 18px;
-                font-weight: bold;
-                color: #43a047;
-                padding: 5px;
-                background-color: #e8f5e9;
-                border-radius: 4px;
-            }
-        """)
+        self.peak_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: normal;")
         metrics_grid.addWidget(self.peak_label, 0, 3)
         
         # Noise level
         noise_title = QLabel("Noise:")
         noise_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(noise_title, 1, 0)
+        metrics_grid.addWidget(noise_title, 1, 2)
         self.noise_label = QLabel("--")
         self.noise_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: bold;")
-        metrics_grid.addWidget(self.noise_label, 1, 1)
+        metrics_grid.addWidget(self.noise_label, 1, 3)
         
         # Scans
         scans_title = QLabel("Scans:")
         scans_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(scans_title, 1, 2)
+        metrics_grid.addWidget(scans_title, 2, 0)
         self.scans_label = QLabel("--")
         self.scans_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: bold;")
-        metrics_grid.addWidget(self.scans_label, 1, 3)
+        metrics_grid.addWidget(self.scans_label, 2, 1)
         
         results_layout.addLayout(metrics_grid)
         
@@ -2184,16 +2174,21 @@ class EnhancedNMRProcessingUI(QMainWindow):
         results.append(f"[OK] Hanning: {'Yes' if self.params['use_hanning'] else 'No'}")
         results.append(f"[OK] Zero Fill Factor: {self.params['zf_factor']:.2f}")
         
-        # Calculate peak height
-        peak_height = np.max(spectrum_abs)
-        self.peak_label.setText(f"{peak_height:.1f}")
-        
         # SNR calculation
         if HAS_NMRDUINO:
             try:
                 # Use user-defined ranges from UI
                 frequency_range_snr = [self.signal_range_min.value(), self.signal_range_max.value()]
                 noise_range_snr = [self.noise_range_min.value(), self.noise_range_max.value()]
+                
+                # Calculate peak height from signal region
+                signal_idx = (freq_axis >= frequency_range_snr[0]) & (freq_axis <= frequency_range_snr[1])
+                if np.any(signal_idx):
+                    peak_height = np.max(spectrum_abs[signal_idx])
+                else:
+                    peak_height = np.max(spectrum_abs)  # Fallback to global max
+                self.peak_label.setText(f"{peak_height:.1f}")
+                
                 snr = nmr_util.snr_calc(freq_axis, spectrum_abs, 
                                        frequency_range_snr, noise_range_snr)
                 
@@ -2204,14 +2199,18 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 
                 results.append("\n═══ Quality Metrics ═══")
                 
-                if self.scan_count > 0:
+                # Display total SNR (from averaged data)
+                self.snr_label.setText(f"{snr:.1f}")
+                results.append(f"SNR (total, {self.scan_count} scans): {snr:.2f}")
+                
+                # Calculate and display per-scan SNR
+                if self.scan_count > 1:
                     snr_per_scan = snr / np.sqrt(self.scan_count)
-                    self.snr_label.setText(f"{snr_per_scan:.1f}")
-                    results.append(f"SNR (per scan): {snr_per_scan:.2f}")
-                    results.append(f"SNR (total): {snr:.2f}")
+                    self.snr_per_scan_label.setText(f"{snr_per_scan:.2f}")
+                    results.append(f"SNR (estimated per scan): {snr_per_scan:.2f}")
                 else:
-                    self.snr_label.setText(f"{snr:.1f}")
-                    results.append(f"SNR: {snr:.2f}")
+                    self.snr_per_scan_label.setText(f"{snr:.2f}")
+                    results.append(f"SNR (single scan): {snr:.2f}")
                 
                 results.append(f"Peak Height: {peak_height:.2f}")
                 results.append(f"Noise Level: {noise_level:.2f}")
@@ -2220,11 +2219,19 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 
             except Exception as e:
                 self.snr_label.setText("Error")
+                self.snr_per_scan_label.setText("--")
                 self.noise_label.setText("--")
+                # Still show peak height
+                peak_height = np.max(spectrum_abs)
+                self.peak_label.setText(f"{peak_height:.1f}")
                 results.append(f"\n[ERROR] SNR calculation failed: {e}")
         else:
             self.snr_label.setText("N/A")
+            self.snr_per_scan_label.setText("--")
             self.noise_label.setText("--")
+            # Show global peak height as fallback
+            peak_height = np.max(spectrum_abs)
+            self.peak_label.setText(f"{peak_height:.1f}")
             results.append("\n[WARNING] nmrduino_util not available for SNR calculation")
         
         self.results_text.setText('\n'.join(results))
