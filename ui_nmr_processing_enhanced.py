@@ -38,7 +38,7 @@ from scipy.fft import fft
 
 # Import nmrduino_util
 try:
-    import nmrduino_util as nmr_util
+    from nmr_processing_lib import nmrduino_util as nmr_util
     HAS_NMRDUINO = True
 except:
     HAS_NMRDUINO = False
