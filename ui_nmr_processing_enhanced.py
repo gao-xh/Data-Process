@@ -2471,6 +2471,46 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.peak_label.setText(f"{peak_height:.1f}")
             results.append("\n[WARNING] nmrduino_util not available for SNR calculation")
         
+        # Calculate metrics for Data B if in comparison mode
+        if self.comparison_mode and self.processed_b is not None:
+            results.append("\n\n═══ Data B Metrics ═══")
+            freq_axis_b = self.processed_b['freq_axis']
+            spectrum_b = self.processed_b['spectrum']
+            spectrum_abs_b = np.abs(spectrum_b)
+            
+            if HAS_NMRDUINO:
+                try:
+                    # Calculate peak height from signal region
+                    signal_idx_b = (freq_axis_b >= frequency_range_snr[0]) & (freq_axis_b <= frequency_range_snr[1])
+                    if np.any(signal_idx_b):
+                        peak_height_b = np.max(spectrum_abs_b[signal_idx_b])
+                    else:
+                        peak_height_b = np.max(spectrum_abs_b)
+                    
+                    snr_b = nmr_util.snr_calc(freq_axis_b, spectrum_abs_b, 
+                                           frequency_range_snr, noise_range_snr)
+                    
+                    noise_idx_b = (freq_axis_b >= noise_range_snr[0]) & (freq_axis_b <= noise_range_snr[1])
+                    noise_level_b = np.std(spectrum_abs_b[noise_idx_b])
+                    
+                    results.append(f"SNR (total, {self.scan_count_b} scans): {snr_b:.2f}")
+                    if self.scan_count_b > 1:
+                        snr_per_scan_b = snr_b / np.sqrt(self.scan_count_b)
+                        results.append(f"SNR (estimated per scan): {snr_per_scan_b:.2f}")
+                    results.append(f"Peak Height: {peak_height_b:.2f}")
+                    results.append(f"Noise Level: {noise_level_b:.2f}")
+                    
+                    # Show comparison
+                    results.append("\n═══ Comparison (A vs B) ═══")
+                    snr_diff = snr - snr_b
+                    snr_ratio = snr / snr_b if snr_b > 0 else float('inf')
+                    results.append(f"SNR Difference (A-B): {snr_diff:+.2f}")
+                    results.append(f"SNR Ratio (A/B): {snr_ratio:.2f}x")
+                    results.append(f"Peak Difference (A-B): {(peak_height - peak_height_b):+.2f}")
+                    
+                except Exception as e:
+                    results.append(f"[ERROR] Data B metrics calculation failed: {e}")
+        
         self.results_text.setText('\n'.join(results))
     
     @Slot()
