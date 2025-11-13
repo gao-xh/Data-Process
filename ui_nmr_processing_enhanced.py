@@ -1849,6 +1849,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     np.save(compiled_path, self.halp)
                     np.save(os.path.join(folder, "sampling_rate_compiled.npy"), self.sampling_rate)
                     np.save(os.path.join(folder, "acq_time_compiled.npy"), self.acq_time)
+                    np.save(os.path.join(folder, "scan_count.npy"), self.scan_count)
             else:
                 # Manual loading
                 compiled_path = os.path.join(folder, "halp_compiled.npy")
@@ -1856,6 +1857,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     self.halp = np.load(compiled_path)
                     self.sampling_rate = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
                     self.acq_time = np.load(os.path.join(folder, "acq_time_compiled.npy"))
+                    
+                    # Load scan count if available, otherwise default to 1
+                    scan_count_path = os.path.join(folder, "scan_count.npy")
+                    if os.path.exists(scan_count_path):
+                        self.scan_count = int(np.load(scan_count_path))
+                    else:
+                        # Try to count .dat files in folder
+                        dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
+                        self.scan_count = len(dat_files) if dat_files else 1
+                        print(f"Warning: scan_count.npy not found, detected {self.scan_count} scans from .dat files")
                 else:
                     raise FileNotFoundError("No compiled data found. Please compile first or install nmrduino_util.")
             
