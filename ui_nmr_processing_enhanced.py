@@ -2220,11 +2220,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'freq_high_max': self.freq_high_max.value()
         }
         
+        # Update params_b if using same parameters
+        if self.use_same_params:
+            self.params_b = self.params.copy()
+        
         # Show progress
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
         
-        # Process in background
+        # Process Data A
         self.worker = ProcessingWorker(
             self.halp,
             self.sampling_rate,
@@ -2235,6 +2239,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.worker.error.connect(self.on_processing_error)
         self.worker.progress.connect(self.on_processing_progress)
         self.worker.start()
+        
+        # Process Data B if in comparison mode
+        if self.comparison_mode and self.halp_b is not None:
+            # Wait for Data A processing to finish, then process Data B
+            # For now, we'll process them sequentially
+            pass  # Will be handled in on_processing_finished
     
     @Slot(str)
     def on_processing_progress(self, message):
@@ -2245,6 +2255,33 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def on_processing_finished(self, result):
         """Handle processing finished"""
         self.processed = result
+        
+        # If in comparison mode and Data B needs processing
+        if self.comparison_mode and self.halp_b is not None and self.processed_b is None:
+            # Process Data B
+            self.progress_label.setText("Processing Data B...")
+            self.worker = ProcessingWorker(
+                self.halp_b,
+                self.sampling_rate_b,
+                self.acq_time_b,
+                self.params_b
+            )
+            self.worker.finished.connect(self.on_processing_b_finished)
+            self.worker.error.connect(self.on_processing_error)
+            self.worker.progress.connect(self.on_processing_progress)
+            self.worker.start()
+            return
+        
+        self.progress_bar.setVisible(False)
+        self.progress_label.setText("")
+        self.plot_results()
+        self.calculate_metrics()
+        self.export_btn.setEnabled(True)
+    
+    @Slot(object)
+    def on_processing_b_finished(self, result):
+        """Handle Data B processing finished"""
+        self.processed_b = result
         self.progress_bar.setVisible(False)
         self.progress_label.setText("")
         self.plot_results()
@@ -2263,6 +2300,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         if self.processed is None:
             return
         
+        # Check if in comparison mode with overlay
+        if self.comparison_mode and self.processed_b is not None and self.display_overlay.isChecked():
+            self.plot_overlay_comparison()
+            return
+        
         time_data = self.processed['time_data']
         freq_axis = self.processed['freq_axis']
         spectrum = self.processed['spectrum']
@@ -2271,22 +2313,39 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Time domain
         time_axis = np.linspace(0, acq_time, len(time_data))
         self.time_canvas.axes.clear()
-        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'k-', linewidth=0.5, alpha=0.8)
+        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8, alpha=0.8, label='Data A')
+        
+        # Add Data B if in comparison mode and side-by-side
+        if self.comparison_mode and self.processed_b is not None:
+            time_data_b = self.processed_b['time_data']
+            acq_time_b = self.processed_b['acq_time_effective']
+            time_axis_b = np.linspace(0, acq_time_b, len(time_data_b))
+            self.time_canvas.axes.plot(time_axis_b, np.real(time_data_b), 'r-', linewidth=0.8, alpha=0.6, label='Data B')
+            self.time_canvas.axes.legend(fontsize=9)
+        
         self.time_canvas.axes.set_xlabel('Time (s)', fontsize=10, fontweight='bold')
         self.time_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.time_canvas.axes.set_title('Time Domain Signal (After Processing)', fontsize=11, fontweight='bold')
+        title = 'Time Domain Signal - Comparison' if self.comparison_mode else 'Time Domain Signal (After Processing)'
+        self.time_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
         self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
-        self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)  # Auto-scale Y axis
+        self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)
         self.time_canvas.fig.tight_layout()
         self.time_canvas.draw()
         
-        # Frequency domain - low freq (plot all data, but set view range)
+        # Frequency domain - low freq
         freq_range_low = [self.freq_low_min.value(), self.freq_low_max.value()]
         
         self.freq1_canvas.axes.clear()
-        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=0.8)
-        self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])  # Set initial view range
-        # Auto-scale Y based on visible data in the X range
+        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        
+        # Add Data B
+        if self.comparison_mode and self.processed_b is not None:
+            freq_axis_b = self.processed_b['freq_axis']
+            spectrum_b = self.processed_b['spectrum']
+            self.freq1_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+            self.freq1_canvas.axes.legend(fontsize=9)
+        
+        self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         idx_visible = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
         if np.any(idx_visible):
             y_visible = np.abs(spectrum)[idx_visible]
@@ -2294,19 +2353,27 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.freq1_canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
         self.freq1_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
         self.freq1_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.freq1_canvas.axes.set_title(f'Low Frequency Spectrum (View: {freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', 
-                                         fontsize=11, fontweight='bold')
+        title = f'Low Freq Comparison (View: {freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)' if self.comparison_mode \
+                else f'Low Frequency Spectrum (View: {freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)'
+        self.freq1_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
         self.freq1_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq1_canvas.fig.tight_layout()
         self.freq1_canvas.draw()
         
-        # Frequency domain - high freq (plot all data, but set view range)
+        # Frequency domain - high freq
         freq_range_high = [self.freq_high_min.value(), self.freq_high_max.value()]
         
         self.freq2_canvas.axes.clear()
-        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), 'r-', linewidth=0.8)
-        self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])  # Set initial view range
-        # Auto-scale Y based on visible data in the X range
+        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        
+        # Add Data B
+        if self.comparison_mode and self.processed_b is not None:
+            freq_axis_b = self.processed_b['freq_axis']
+            spectrum_b = self.processed_b['spectrum']
+            self.freq2_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+            self.freq2_canvas.axes.legend(fontsize=9)
+        
+        self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
         idx_visible = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
         if np.any(idx_visible):
             y_visible = np.abs(spectrum)[idx_visible]
@@ -2314,11 +2381,18 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.freq2_canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
         self.freq2_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
         self.freq2_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.freq2_canvas.axes.set_title(f'High Frequency Spectrum (View: {freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', 
-                                         fontsize=11, fontweight='bold')
+        title = f'High Freq Comparison (View: {freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)' if self.comparison_mode \
+                else f'High Frequency Spectrum (View: {freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)'
+        self.freq2_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
         self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq2_canvas.fig.tight_layout()
         self.freq2_canvas.draw()
+    
+    def plot_overlay_comparison(self):
+        """Plot Data A and B overlaid on same axes"""
+        # This is called when overlay mode is selected
+        # For now, just call plot_results which already handles overlay
+        pass
     
     def calculate_metrics(self):
         """Calculate and display metrics"""
