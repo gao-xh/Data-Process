@@ -644,6 +644,183 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.comparison_controls_group.setLayout(comparison_layout)
         layout.addWidget(self.comparison_controls_group)
         
+        # Data B Parameters Group (initially hidden)
+        self.data_b_params_group = QGroupBox("Data B Parameters")
+        self.data_b_params_group.setVisible(False)
+        self.data_b_params_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e57373;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+                background-color: #ffebee;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #c62828;
+            }
+        """)
+        data_b_params_layout = QVBoxLayout()
+        data_b_params_layout.setSpacing(8)
+        
+        info_label = QLabel("Configure parameters for Data B separately:")
+        info_label.setStyleSheet("font-size: 9px; color: #666; font-style: italic;")
+        data_b_params_layout.addWidget(info_label)
+        
+        # Add key parameters for Data B (simplified version)
+        param_grid = QGridLayout()
+        param_grid.setSpacing(8)
+        
+        # Savgol Conv Points
+        row = 0
+        conv_label = QLabel("Conv Points:")
+        conv_label.setStyleSheet("font-size: 9px; font-weight: bold;")
+        param_grid.addWidget(conv_label, row, 0)
+        self.conv_spinbox_b = QSpinBox()
+        self.conv_spinbox_b.setRange(2, 12000)
+        self.conv_spinbox_b.setValue(300)
+        self.conv_spinbox_b.setStyleSheet("""
+            QSpinBox {
+                background-color: #ef5350;
+                color: white;
+                font-weight: bold;
+                padding: 4px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+        """)
+        param_grid.addWidget(self.conv_spinbox_b, row, 1)
+        
+        # Polynomial Order
+        poly_label = QLabel("Poly Order:")
+        poly_label.setStyleSheet("font-size: 9px; font-weight: bold;")
+        param_grid.addWidget(poly_label, row, 2)
+        self.poly_spinbox_b = QSpinBox()
+        self.poly_spinbox_b.setRange(1, 20)
+        self.poly_spinbox_b.setValue(2)
+        self.poly_spinbox_b.setStyleSheet("""
+            QSpinBox {
+                background-color: #ef5350;
+                color: white;
+                font-weight: bold;
+                padding: 4px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+        """)
+        param_grid.addWidget(self.poly_spinbox_b, row, 3)
+        row += 1
+        
+        # Truncation
+        trunc_label = QLabel("Truncation:")
+        trunc_label.setStyleSheet("font-size: 9px; font-weight: bold;")
+        param_grid.addWidget(trunc_label, row, 0)
+        self.trunc_spinbox_b = QSpinBox()
+        self.trunc_spinbox_b.setRange(1, 100000)
+        self.trunc_spinbox_b.setValue(1600)
+        self.trunc_spinbox_b.setStyleSheet("""
+            QSpinBox {
+                background-color: #ef5350;
+                color: white;
+                font-weight: bold;
+                padding: 4px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+        """)
+        param_grid.addWidget(self.trunc_spinbox_b, row, 1)
+        
+        # T2star
+        t2_label = QLabel("T2*:")
+        t2_label.setStyleSheet("font-size: 9px; font-weight: bold;")
+        param_grid.addWidget(t2_label, row, 2)
+        self.t2_spinbox_b = QDoubleSpinBox()
+        self.t2_spinbox_b.setRange(0.0001, 10.0)
+        self.t2_spinbox_b.setValue(0.029)
+        self.t2_spinbox_b.setDecimals(4)
+        self.t2_spinbox_b.setSingleStep(0.001)
+        self.t2_spinbox_b.setStyleSheet("""
+            QDoubleSpinBox {
+                background-color: #ef5350;
+                color: white;
+                font-weight: bold;
+                padding: 4px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+        """)
+        param_grid.addWidget(self.t2_spinbox_b, row, 3)
+        row += 1
+        
+        # Hanning Factor
+        hanning_label = QLabel("Hanning:")
+        hanning_label.setStyleSheet("font-size: 9px; font-weight: bold;")
+        param_grid.addWidget(hanning_label, row, 0)
+        self.hanning_spinbox_b = QDoubleSpinBox()
+        self.hanning_spinbox_b.setRange(0.0, 1.0)
+        self.hanning_spinbox_b.setValue(0.2)
+        self.hanning_spinbox_b.setDecimals(2)
+        self.hanning_spinbox_b.setSingleStep(0.05)
+        self.hanning_spinbox_b.setStyleSheet("""
+            QDoubleSpinBox {
+                background-color: #ef5350;
+                color: white;
+                font-weight: bold;
+                padding: 4px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+        """)
+        param_grid.addWidget(self.hanning_spinbox_b, row, 1)
+        
+        # Zero Fill
+        zerofill_label = QLabel("Zero Fill:")
+        zerofill_label.setStyleSheet("font-size: 9px; font-weight: bold;")
+        param_grid.addWidget(zerofill_label, row, 2)
+        self.zerofill_spinbox_b = QSpinBox()
+        self.zerofill_spinbox_b.setRange(0, 1000000)
+        self.zerofill_spinbox_b.setValue(10000)
+        self.zerofill_spinbox_b.setSingleStep(1000)
+        self.zerofill_spinbox_b.setStyleSheet("""
+            QSpinBox {
+                background-color: #ef5350;
+                color: white;
+                font-weight: bold;
+                padding: 4px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+        """)
+        param_grid.addWidget(self.zerofill_spinbox_b, row, 3)
+        
+        data_b_params_layout.addLayout(param_grid)
+        
+        # Apply button for Data B params
+        apply_b_params_btn = QPushButton("Apply Data B Parameters")
+        apply_b_params_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e53935;
+                color: white;
+                padding: 6px;
+                font-weight: bold;
+                font-size: 9px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c62828;
+            }
+        """)
+        apply_b_params_btn.clicked.connect(self.apply_data_b_params)
+        data_b_params_layout.addWidget(apply_b_params_btn)
+        
+        self.data_b_params_group.setLayout(data_b_params_layout)
+        layout.addWidget(self.data_b_params_group)
+        
         # Scan Selection Group
         scan_group = QGroupBox("Scan Selection")
         scan_group.setStyleSheet("""
@@ -939,52 +1116,47 @@ class EnhancedNMRProcessingUI(QMainWindow):
         results_layout = QVBoxLayout()
         results_layout.setSpacing(10)
         
-        # Metrics display grid
-        metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(12)
-        metrics_grid.setContentsMargins(10, 10, 10, 10)
+        # Unified metrics table (for both single and comparison mode)
+        from PySide6.QtWidgets import QTableWidget, QHeaderView, QTableWidgetItem
+        self.metrics_table = QTableWidget()
+        self.metrics_table.setColumnCount(3)  # Will hide column 2 in single mode
+        self.metrics_table.setRowCount(5)
+        self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value", ""])
+        self.metrics_table.setVerticalHeaderLabels(["", "", "", "", ""])
+        self.metrics_table.verticalHeader().setVisible(False)
+        self.metrics_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.metrics_table.setMaximumHeight(180)
+        self.metrics_table.setColumnHidden(2, True)  # Hide Data B column initially
+        self.metrics_table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 5px;
+                gridline-color: #e0e0e0;
+                font-size: 10px;
+            }
+            QTableWidget::item {
+                padding: 4px;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 6px;
+                border: none;
+                border-bottom: 2px solid #e0e0e0;
+                font-weight: bold;
+                font-size: 10px;
+                color: #424242;
+            }
+        """)
         
-        # SNR (Total)
-        snr_title = QLabel("SNR (Total):")
-        snr_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(snr_title, 0, 0)
-        self.snr_label = QLabel("--")
-        self.snr_label.setStyleSheet("font-size: 13px; color: #424242; font-weight: bold;")
-        metrics_grid.addWidget(self.snr_label, 0, 1)
+        # Initialize table items (will be updated in calculate_metrics)
+        for row in range(5):
+            for col in range(3):
+                item = QTableWidgetItem("--")
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)  # Make read-only
+                self.metrics_table.setItem(row, col, item)
         
-        # SNR (Per Scan)
-        snr_per_scan_title = QLabel("SNR (Per Scan):")
-        snr_per_scan_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(snr_per_scan_title, 1, 0)
-        self.snr_per_scan_label = QLabel("--")
-        self.snr_per_scan_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: normal;")
-        metrics_grid.addWidget(self.snr_per_scan_label, 1, 1)
-        
-        # Peak height
-        peak_title = QLabel("Peak:")
-        peak_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(peak_title, 0, 2)
-        self.peak_label = QLabel("--")
-        self.peak_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: normal;")
-        metrics_grid.addWidget(self.peak_label, 0, 3)
-        
-        # Noise level
-        noise_title = QLabel("Noise:")
-        noise_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(noise_title, 1, 2)
-        self.noise_label = QLabel("--")
-        self.noise_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: bold;")
-        metrics_grid.addWidget(self.noise_label, 1, 3)
-        
-        # Scans
-        scans_title = QLabel("Scans:")
-        scans_title.setStyleSheet("font-size: 11px; color: #757575; font-weight: normal;")
-        metrics_grid.addWidget(scans_title, 2, 0)
-        self.scans_label = QLabel("--")
-        self.scans_label.setStyleSheet("font-size: 11px; color: #616161; font-weight: bold;")
-        metrics_grid.addWidget(self.scans_label, 2, 1)
-        
-        results_layout.addLayout(metrics_grid)
+        results_layout.addWidget(self.metrics_table)
         
         # Detailed info
         self.results_text = QTextEdit()
@@ -2158,8 +2330,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 f"{param_status}"
             )
             
-            self.scans_label.setText(str(self.scan_count))
-            
             # Initialize scan selection controls (block signals to prevent reload)
             if self.scan_count > 0:
                 # Update spin box ranges without triggering signals
@@ -2223,6 +2393,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Update params_b if using same parameters
         if self.use_same_params:
             self.params_b = self.params.copy()
+        
+        # Reset processed_b to trigger reprocessing if in comparison mode
+        if self.comparison_mode and self.halp_b is not None:
+            self.processed_b = None
         
         # Show progress
         self.progress_bar.setVisible(True)
@@ -2298,6 +2472,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def plot_results(self):
         """Plot processing results"""
         if self.processed is None:
+            return
+        
+        # Check if in comparison mode with side-by-side
+        if self.comparison_mode and self.processed_b is not None and self.display_side_by_side.isChecked():
+            self.plot_side_by_side_comparison()
             return
         
         # Check if in comparison mode with overlay
@@ -2388,16 +2567,219 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq2_canvas.fig.tight_layout()
         self.freq2_canvas.draw()
     
+    def plot_side_by_side_comparison(self):
+        """Plot Data A and B side by side using subplots"""
+        time_data = self.processed['time_data']
+        freq_axis = self.processed['freq_axis']
+        spectrum = self.processed['spectrum']
+        acq_time = self.processed['acq_time_effective']
+        
+        time_data_b = self.processed_b['time_data']
+        freq_axis_b = self.processed_b['freq_axis']
+        spectrum_b = self.processed_b['spectrum']
+        acq_time_b = self.processed_b['acq_time_effective']
+        
+        # Time domain - side by side
+        time_axis = np.linspace(0, acq_time, len(time_data))
+        time_axis_b = np.linspace(0, acq_time_b, len(time_data_b))
+        
+        self.time_canvas.fig.clear()
+        ax1 = self.time_canvas.fig.add_subplot(1, 2, 1)
+        ax2 = self.time_canvas.fig.add_subplot(1, 2, 2)
+        
+        ax1.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8)
+        ax1.set_xlabel('Time (s)', fontsize=9, fontweight='bold')
+        ax1.set_ylabel('Amplitude', fontsize=9, fontweight='bold')
+        ax1.set_title('Data A - Time Domain', fontsize=10, fontweight='bold')
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        
+        ax2.plot(time_axis_b, np.real(time_data_b), 'r-', linewidth=0.8)
+        ax2.set_xlabel('Time (s)', fontsize=9, fontweight='bold')
+        ax2.set_ylabel('Amplitude', fontsize=9, fontweight='bold')
+        ax2.set_title('Data B - Time Domain', fontsize=10, fontweight='bold')
+        ax2.grid(True, alpha=0.3, linestyle='--')
+        
+        self.time_canvas.fig.tight_layout()
+        self.time_canvas.draw()
+        
+        # Frequency domain - low freq - side by side
+        freq_range_low = [self.freq_low_min.value(), self.freq_low_max.value()]
+        
+        self.freq1_canvas.fig.clear()
+        ax1 = self.freq1_canvas.fig.add_subplot(1, 2, 1)
+        ax2 = self.freq1_canvas.fig.add_subplot(1, 2, 2)
+        
+        ax1.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0)
+        ax1.set_xlim(freq_range_low[0], freq_range_low[1])
+        idx_visible = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
+        if np.any(idx_visible):
+            y_visible = np.abs(spectrum)[idx_visible]
+            y_max = np.max(y_visible)
+            ax1.set_ylim(-0.05 * y_max, 1.1 * y_max)
+        ax1.set_xlabel('Frequency (Hz)', fontsize=9, fontweight='bold')
+        ax1.set_ylabel('Amplitude', fontsize=9, fontweight='bold')
+        ax1.set_title(f'Data A - Low Freq ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=10, fontweight='bold')
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        
+        ax2.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0)
+        ax2.set_xlim(freq_range_low[0], freq_range_low[1])
+        idx_visible_b = (freq_axis_b >= freq_range_low[0]) & (freq_axis_b <= freq_range_low[1])
+        if np.any(idx_visible_b):
+            y_visible_b = np.abs(spectrum_b)[idx_visible_b]
+            y_max_b = np.max(y_visible_b)
+            ax2.set_ylim(-0.05 * y_max_b, 1.1 * y_max_b)
+        ax2.set_xlabel('Frequency (Hz)', fontsize=9, fontweight='bold')
+        ax2.set_ylabel('Amplitude', fontsize=9, fontweight='bold')
+        ax2.set_title(f'Data B - Low Freq ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=10, fontweight='bold')
+        ax2.grid(True, alpha=0.3, linestyle='--')
+        
+        self.freq1_canvas.fig.tight_layout()
+        self.freq1_canvas.draw()
+        
+        # Frequency domain - high freq - side by side
+        freq_range_high = [self.freq_high_min.value(), self.freq_high_max.value()]
+        
+        self.freq2_canvas.fig.clear()
+        ax1 = self.freq2_canvas.fig.add_subplot(1, 2, 1)
+        ax2 = self.freq2_canvas.fig.add_subplot(1, 2, 2)
+        
+        ax1.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0)
+        ax1.set_xlim(freq_range_high[0], freq_range_high[1])
+        idx_visible = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
+        if np.any(idx_visible):
+            y_visible = np.abs(spectrum)[idx_visible]
+            y_max = np.max(y_visible)
+            ax1.set_ylim(-0.05 * y_max, 1.1 * y_max)
+        ax1.set_xlabel('Frequency (Hz)', fontsize=9, fontweight='bold')
+        ax1.set_ylabel('Amplitude', fontsize=9, fontweight='bold')
+        ax1.set_title(f'Data A - High Freq ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=10, fontweight='bold')
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        
+        ax2.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0)
+        ax2.set_xlim(freq_range_high[0], freq_range_high[1])
+        idx_visible_b = (freq_axis_b >= freq_range_high[0]) & (freq_axis_b <= freq_range_high[1])
+        if np.any(idx_visible_b):
+            y_visible_b = np.abs(spectrum_b)[idx_visible_b]
+            y_max_b = np.max(y_visible_b)
+            ax2.set_ylim(-0.05 * y_max_b, 1.1 * y_max_b)
+        ax2.set_xlabel('Frequency (Hz)', fontsize=9, fontweight='bold')
+        ax2.set_ylabel('Amplitude', fontsize=9, fontweight='bold')
+        ax2.set_title(f'Data B - High Freq ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=10, fontweight='bold')
+        ax2.grid(True, alpha=0.3, linestyle='--')
+        
+        self.freq2_canvas.fig.tight_layout()
+        self.freq2_canvas.draw()
+    
     def plot_overlay_comparison(self):
         """Plot Data A and B overlaid on same axes"""
-        # This is called when overlay mode is selected
-        # For now, just call plot_results which already handles overlay
-        pass
+        time_data = self.processed['time_data']
+        freq_axis = self.processed['freq_axis']
+        spectrum = self.processed['spectrum']
+        acq_time = self.processed['acq_time_effective']
+        
+        time_data_b = self.processed_b['time_data']
+        freq_axis_b = self.processed_b['freq_axis']
+        spectrum_b = self.processed_b['spectrum']
+        acq_time_b = self.processed_b['acq_time_effective']
+        
+        # Time domain - overlay
+        time_axis = np.linspace(0, acq_time, len(time_data))
+        time_axis_b = np.linspace(0, acq_time_b, len(time_data_b))
+        
+        self.time_canvas.fig.clear()
+        self.time_canvas.axes = self.time_canvas.fig.add_subplot(111)
+        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8, alpha=0.8, label='Data A')
+        self.time_canvas.axes.plot(time_axis_b, np.real(time_data_b), 'r-', linewidth=0.8, alpha=0.6, label='Data B')
+        
+        # Set y-axis limits based on both datasets
+        y_max_a = np.max(np.abs(np.real(time_data)))
+        y_max_b = np.max(np.abs(np.real(time_data_b)))
+        y_max_combined = max(y_max_a, y_max_b)
+        self.time_canvas.axes.set_ylim(-1.1 * y_max_combined, 1.1 * y_max_combined)
+        
+        self.time_canvas.axes.set_xlabel('Time (s)', fontsize=10, fontweight='bold')
+        self.time_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
+        self.time_canvas.axes.set_title('Time Domain - Overlay Comparison', fontsize=11, fontweight='bold')
+        self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
+        self.time_canvas.axes.legend(fontsize=9)
+        self.time_canvas.fig.tight_layout()
+        self.time_canvas.draw()
+        
+        # Frequency domain - low freq - overlay
+        freq_range_low = [self.freq_low_min.value(), self.freq_low_max.value()]
+        
+        self.freq1_canvas.fig.clear()
+        self.freq1_canvas.axes = self.freq1_canvas.fig.add_subplot(111)
+        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        self.freq1_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+        self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
+        
+        # Set y-axis limits based on both datasets in visible range
+        idx_visible_a = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
+        idx_visible_b = (freq_axis_b >= freq_range_low[0]) & (freq_axis_b <= freq_range_low[1])
+        y_max_list = []
+        if np.any(idx_visible_a):
+            y_max_list.append(np.max(np.abs(spectrum)[idx_visible_a]))
+        if np.any(idx_visible_b):
+            y_max_list.append(np.max(np.abs(spectrum_b)[idx_visible_b]))
+        if y_max_list:
+            y_max_combined = max(y_max_list)
+            self.freq1_canvas.axes.set_ylim(-0.05 * y_max_combined, 1.1 * y_max_combined)
+        
+        self.freq1_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
+        self.freq1_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
+        self.freq1_canvas.axes.set_title(f'Low Freq - Overlay ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=11, fontweight='bold')
+        self.freq1_canvas.axes.grid(True, alpha=0.3, linestyle='--')
+        self.freq1_canvas.axes.legend(fontsize=9)
+        self.freq1_canvas.fig.tight_layout()
+        self.freq1_canvas.draw()
+        
+        # Frequency domain - high freq - overlay
+        freq_range_high = [self.freq_high_min.value(), self.freq_high_max.value()]
+        
+        self.freq2_canvas.fig.clear()
+        self.freq2_canvas.axes = self.freq2_canvas.fig.add_subplot(111)
+        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        self.freq2_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+        self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
+        
+        # Set y-axis limits based on both datasets in visible range
+        idx_visible_a = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
+        idx_visible_b = (freq_axis_b >= freq_range_high[0]) & (freq_axis_b <= freq_range_high[1])
+        y_max_list = []
+        if np.any(idx_visible_a):
+            y_max_list.append(np.max(np.abs(spectrum)[idx_visible_a]))
+        if np.any(idx_visible_b):
+            y_max_list.append(np.max(np.abs(spectrum_b)[idx_visible_b]))
+        if y_max_list:
+            y_max_combined = max(y_max_list)
+            self.freq2_canvas.axes.set_ylim(-0.05 * y_max_combined, 1.1 * y_max_combined)
+        
+        self.freq2_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
+        self.freq2_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
+        self.freq2_canvas.axes.set_title(f'High Freq - Overlay ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=11, fontweight='bold')
+        self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
+        self.freq2_canvas.axes.legend(fontsize=9)
+        self.freq2_canvas.fig.tight_layout()
+        self.freq2_canvas.draw()
     
     def calculate_metrics(self):
         """Calculate and display metrics"""
         if self.processed is None:
             return
+        
+        from PySide6.QtWidgets import QTableWidgetItem
+        from PySide6.QtCore import Qt
+        
+        # Configure table based on comparison mode
+        if self.comparison_mode and self.processed_b is not None:
+            # Show all 3 columns for comparison
+            self.metrics_table.setColumnHidden(2, False)
+            self.metrics_table.setHorizontalHeaderLabels(["Metric", "Data A", "Data B"])
+        else:
+            # Hide Data B column for single mode
+            self.metrics_table.setColumnHidden(2, True)
+            self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value", ""])
         
         freq_axis = self.processed['freq_axis']
         spectrum = self.processed['spectrum']
@@ -2436,44 +2818,81 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 
                 results.append("\n═══ Quality Metrics ═══")
                 
-                # Display total SNR (from averaged data)
-                self.snr_label.setText(f"{snr:.1f}")
-                results.append(f"SNR (total, {self.scan_count} scans): {snr:.2f}")
-                
-                # Calculate and display per-scan SNR
+                # Calculate per-scan SNR
                 if self.scan_count > 1:
                     snr_per_scan = snr / np.sqrt(self.scan_count)
-                    self.snr_per_scan_label.setText(f"{snr_per_scan:.2f}")
-                    results.append(f"SNR (estimated per scan): {snr_per_scan:.2f}")
                 else:
-                    self.snr_per_scan_label.setText(f"{snr:.2f}")
-                    results.append(f"SNR (single scan): {snr:.2f}")
+                    snr_per_scan = snr
                 
+                # Update table for single mode
+                self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
+                self.metrics_table.setItem(0, 1, QTableWidgetItem(f"{snr:.2f}"))
+                
+                self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
+                self.metrics_table.setItem(1, 1, QTableWidgetItem(f"{snr_per_scan:.2f}"))
+                
+                self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
+                self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
+                
+                self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
+                self.metrics_table.setItem(3, 1, QTableWidgetItem(f"{noise_level:.2f}"))
+                
+                self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
+                self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
+                
+                # Make all cells read-only and aligned
+                for row in range(5):
+                    for col in range(2):
+                        item = self.metrics_table.item(row, col)
+                        if item:
+                            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                            if col == 0:
+                                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                            else:
+                                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                
+                results.append(f"SNR (total, {self.scan_count} scans): {snr:.2f}")
+                results.append(f"SNR (estimated per scan): {snr_per_scan:.2f}")
                 results.append(f"Peak Height: {peak_height:.2f}")
                 results.append(f"Noise Level: {noise_level:.2f}")
                 results.append(f"Signal Range: {frequency_range_snr}")
                 results.append(f"Noise Range: {noise_range_snr}")
                 
             except Exception as e:
-                self.snr_label.setText("Error")
-                self.snr_per_scan_label.setText("--")
-                self.noise_label.setText("--")
                 # Still show peak height
                 peak_height = np.max(spectrum_abs)
-                self.peak_label.setText(f"{peak_height:.1f}")
+                
+                self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
+                self.metrics_table.setItem(0, 1, QTableWidgetItem("Error"))
+                self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
+                self.metrics_table.setItem(1, 1, QTableWidgetItem("--"))
+                self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
+                self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
+                self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
+                self.metrics_table.setItem(3, 1, QTableWidgetItem("--"))
+                self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
+                self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
+                
                 results.append(f"\n[ERROR] SNR calculation failed: {e}")
         else:
-            self.snr_label.setText("N/A")
-            self.snr_per_scan_label.setText("--")
-            self.noise_label.setText("--")
             # Show global peak height as fallback
             peak_height = np.max(spectrum_abs)
-            self.peak_label.setText(f"{peak_height:.1f}")
+            
+            self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
+            self.metrics_table.setItem(0, 1, QTableWidgetItem("N/A"))
+            self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
+            self.metrics_table.setItem(1, 1, QTableWidgetItem("--"))
+            self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
+            self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
+            self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
+            self.metrics_table.setItem(3, 1, QTableWidgetItem("--"))
+            self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
+            self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
+            
             results.append("\n[WARNING] nmrduino_util not available for SNR calculation")
         
         # Calculate metrics for Data B if in comparison mode
         if self.comparison_mode and self.processed_b is not None:
-            results.append("\n\n═══ Data B Metrics ═══")
             freq_axis_b = self.processed_b['freq_axis']
             spectrum_b = self.processed_b['spectrum']
             spectrum_abs_b = np.abs(spectrum_b)
@@ -2493,23 +2912,100 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     noise_idx_b = (freq_axis_b >= noise_range_snr[0]) & (freq_axis_b <= noise_range_snr[1])
                     noise_level_b = np.std(spectrum_abs_b[noise_idx_b])
                     
-                    results.append(f"SNR (total, {self.scan_count_b} scans): {snr_b:.2f}")
+                    # Calculate per-scan SNR
                     if self.scan_count_b > 1:
                         snr_per_scan_b = snr_b / np.sqrt(self.scan_count_b)
-                        results.append(f"SNR (estimated per scan): {snr_per_scan_b:.2f}")
-                    results.append(f"Peak Height: {peak_height_b:.2f}")
-                    results.append(f"Noise Level: {noise_level_b:.2f}")
+                    else:
+                        snr_per_scan_b = snr_b
                     
-                    # Show comparison
-                    results.append("\n═══ Comparison (A vs B) ═══")
+                    # Get Data A per-scan SNR
+                    if self.scan_count > 1:
+                        snr_per_scan_a = snr / np.sqrt(self.scan_count)
+                    else:
+                        snr_per_scan_a = snr
+                    
+                    # Update table
+                    from PySide6.QtWidgets import QTableWidgetItem
+                    from PySide6.QtCore import Qt
+                    
+                    # Row 0: SNR (Total)
+                    self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
+                    self.metrics_table.setItem(0, 1, QTableWidgetItem(f"{snr:.2f}"))
+                    self.metrics_table.setItem(0, 2, QTableWidgetItem(f"{snr_b:.2f}"))
+                    
+                    # Row 1: SNR (Per Scan)
+                    self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
+                    self.metrics_table.setItem(1, 1, QTableWidgetItem(f"{snr_per_scan_a:.2f}"))
+                    self.metrics_table.setItem(1, 2, QTableWidgetItem(f"{snr_per_scan_b:.2f}"))
+                    
+                    # Row 2: Peak
+                    self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
+                    self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
+                    self.metrics_table.setItem(2, 2, QTableWidgetItem(f"{peak_height_b:.1f}"))
+                    
+                    # Row 3: Noise
+                    self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
+                    self.metrics_table.setItem(3, 1, QTableWidgetItem(f"{noise_level:.2f}"))
+                    self.metrics_table.setItem(3, 2, QTableWidgetItem(f"{noise_level_b:.2f}"))
+                    
+                    # Row 4: Scans
+                    self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
+                    self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
+                    self.metrics_table.setItem(4, 2, QTableWidgetItem(f"{self.scan_count_b}"))
+                    
+                    # Make all cells read-only and center-aligned
+                    for row in range(5):
+                        for col in range(3):
+                            item = self.metrics_table.item(row, col)
+                            if item:
+                                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                                if col == 0:  # Metric column - left align
+                                    item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                                else:  # Data columns - right align
+                                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    
+                    # Create comparison table
+                    results.append("\n\n╔═══════════════════════════════════════════════════════╗")
+                    results.append("║         COMPARISON TABLE (Data A vs Data B)          ║")
+                    results.append("╠═══════════════════════════════════════════════════════╣")
+                    results.append("║ Metric              │   Data A    │   Data B    │ Δ   ║")
+                    results.append("╟─────────────────────┼─────────────┼─────────────┼─────╢")
+                    
+                    # Get Data A per-scan SNR
+                    if self.scan_count > 1:
+                        snr_per_scan_a = snr / np.sqrt(self.scan_count)
+                    else:
+                        snr_per_scan_a = snr
+                    
+                    # SNR Total
                     snr_diff = snr - snr_b
+                    results.append(f"║ SNR (Total)         │ {snr:>10.2f}  │ {snr_b:>10.2f}  │ {snr_diff:>+4.1f}║")
+                    
+                    # SNR Per Scan
+                    snr_ps_diff = snr_per_scan_a - snr_per_scan_b
+                    results.append(f"║ SNR (Per Scan)      │ {snr_per_scan_a:>10.2f}  │ {snr_per_scan_b:>10.2f}  │ {snr_ps_diff:>+4.2f}║")
+                    
+                    # Peak Height
+                    peak_diff = peak_height - peak_height_b
+                    results.append(f"║ Peak Height         │ {peak_height:>10.1f}  │ {peak_height_b:>10.1f}  │ {peak_diff:>+4.0f}║")
+                    
+                    # Noise Level
+                    noise_diff = noise_level - noise_level_b
+                    results.append(f"║ Noise Level         │ {noise_level:>10.2f}  │ {noise_level_b:>10.2f}  │ {noise_diff:>+4.2f}║")
+                    
+                    # Scans
+                    scan_diff = self.scan_count - self.scan_count_b
+                    results.append(f"║ Scans               │ {self.scan_count:>10d}  │ {self.scan_count_b:>10d}  │ {scan_diff:>+4d}║")
+                    
+                    results.append("╚═══════════════════════════════════════════════════════╝")
+                    
+                    # Additional comparison metrics
                     snr_ratio = snr / snr_b if snr_b > 0 else float('inf')
-                    results.append(f"SNR Difference (A-B): {snr_diff:+.2f}")
-                    results.append(f"SNR Ratio (A/B): {snr_ratio:.2f}x")
-                    results.append(f"Peak Difference (A-B): {(peak_height - peak_height_b):+.2f}")
+                    results.append(f"\nSNR Ratio (A/B): {snr_ratio:.3f}x")
+                    results.append(f"SNR Improvement: {((snr/snr_b - 1) * 100):+.1f}%" if snr_b > 0 else "N/A")
                     
                 except Exception as e:
-                    results.append(f"[ERROR] Data B metrics calculation failed: {e}")
+                    results.append(f"\n[ERROR] Data B metrics calculation failed: {e}")
         
         self.results_text.setText('\n'.join(results))
     
@@ -2884,6 +3380,36 @@ class EnhancedNMRProcessingUI(QMainWindow):
         if self.use_same_params:
             # Copy params A to params B
             self.params_b = self.params.copy()
+            # Hide Data B parameters group
+            self.data_b_params_group.setVisible(False)
+        else:
+            # Show Data B parameters group
+            self.data_b_params_group.setVisible(True)
+            # Initialize Data B parameters from current settings if not already set
+            if self.params_b == self.params:
+                self.update_params_b_ui()
+    
+    def update_params_b_ui(self):
+        """Update Data B parameter UI from params_b"""
+        self.conv_spinbox_b.setValue(self.params_b.get('conv_points', 300))
+        self.poly_spinbox_b.setValue(self.params_b.get('poly_order', 2))
+        self.trunc_spinbox_b.setValue(self.params_b.get('truncate_to', 1600))
+        self.t2_spinbox_b.setValue(self.params_b.get('t2star', 0.029))
+        self.hanning_spinbox_b.setValue(self.params_b.get('hanning_factor', 0.2))
+        self.zerofill_spinbox_b.setValue(self.params_b.get('zero_fill_to', 10000))
+    
+    def apply_data_b_params(self):
+        """Apply Data B parameters from UI to params_b"""
+        self.params_b['conv_points'] = self.conv_spinbox_b.value()
+        self.params_b['poly_order'] = self.poly_spinbox_b.value()
+        self.params_b['truncate_to'] = self.trunc_spinbox_b.value()
+        self.params_b['t2star'] = self.t2_spinbox_b.value()
+        self.params_b['hanning_factor'] = self.hanning_spinbox_b.value()
+        self.params_b['zero_fill_to'] = self.zerofill_spinbox_b.value()
+        
+        # Show confirmation
+        QMessageBox.information(self, "Parameters Applied", 
+                              "Data B parameters updated! Click 'Apply Comparison' to reprocess.")
     
     def apply_comparison(self):
         """Apply comparison and update plots"""
