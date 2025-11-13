@@ -20,7 +20,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QSlider, QSpinBox, QDoubleSpinBox,
-    QGroupBox, QCheckBox, QFileDialog, QTextEdit, QMessageBox,
+    QGroupBox, QCheckBox, QRadioButton, QFileDialog, QTextEdit, QMessageBox,
     QGridLayout, QTabWidget, QProgressBar, QComboBox, QSplitter,
     QScrollArea, QMenuBar, QMenu
 )
@@ -480,6 +480,95 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         data_group.setLayout(data_layout)
         layout.addWidget(data_group)
+        
+        # Scan Selection Group
+        scan_group = QGroupBox("Scan Selection")
+        scan_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #424242;
+            }
+        """)
+        scan_layout = QVBoxLayout()
+        scan_layout.setSpacing(8)
+        
+        # Mode selection - using QRadioButton for mutual exclusion
+        mode_layout = QGridLayout()
+        mode_layout.setSpacing(8)
+        
+        self.scan_mode_all = QRadioButton("All Scans (Default)")
+        self.scan_mode_all.setChecked(True)
+        self.scan_mode_all.setStyleSheet("font-size: 10px; font-weight: bold;")
+        self.scan_mode_all.toggled.connect(self.on_scan_mode_changed)
+        mode_layout.addWidget(self.scan_mode_all, 0, 0, 1, 3)
+        
+        self.scan_mode_single = QRadioButton("Single Scan:")
+        self.scan_mode_single.setStyleSheet("font-size: 10px;")
+        self.scan_mode_single.toggled.connect(self.on_scan_mode_changed)
+        mode_layout.addWidget(self.scan_mode_single, 1, 0)
+        
+        self.scan_single_num = QSpinBox()
+        self.scan_single_num.setMinimum(0)
+        self.scan_single_num.setMaximum(0)
+        self.scan_single_num.setEnabled(False)
+        self.scan_single_num.valueChanged.connect(self.schedule_processing)
+        mode_layout.addWidget(self.scan_single_num, 1, 1, 1, 2)
+        
+        self.scan_mode_range = QRadioButton("Scan Range:")
+        self.scan_mode_range.setStyleSheet("font-size: 10px;")
+        self.scan_mode_range.toggled.connect(self.on_scan_mode_changed)
+        mode_layout.addWidget(self.scan_mode_range, 2, 0)
+        
+        range_layout = QHBoxLayout()
+        range_layout.setSpacing(5)
+        
+        self.scan_range_start = QSpinBox()
+        self.scan_range_start.setMinimum(0)
+        self.scan_range_start.setMaximum(0)
+        self.scan_range_start.setEnabled(False)
+        self.scan_range_start.valueChanged.connect(self.schedule_processing)
+        range_layout.addWidget(self.scan_range_start)
+        
+        range_layout.addWidget(QLabel("to"))
+        
+        self.scan_range_end = QSpinBox()
+        self.scan_range_end.setMinimum(0)
+        self.scan_range_end.setMaximum(0)
+        self.scan_range_end.setEnabled(False)
+        self.scan_range_end.valueChanged.connect(self.schedule_processing)
+        range_layout.addWidget(self.scan_range_end)
+        
+        mode_layout.addLayout(range_layout, 2, 1, 1, 2)
+        
+        scan_layout.addLayout(mode_layout)
+        
+        # Info label
+        self.scan_selection_info = QLabel("Load data to enable scan selection")
+        self.scan_selection_info.setWordWrap(True)
+        self.scan_selection_info.setStyleSheet("""
+            QLabel {
+                padding: 8px;
+                background-color: #f5f5f5;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                color: #616161;
+                font-size: 9px;
+            }
+        """)
+        scan_layout.addWidget(self.scan_selection_info)
+        
+        scan_group.setLayout(scan_layout)
+        layout.addWidget(scan_group)
         
         # Parameter tabs
         param_tabs = QTabWidget()
@@ -1543,6 +1632,99 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def on_param_changed(self):
         self.schedule_processing()
     
+    @Slot()
+    def on_scan_mode_changed(self, checked):
+        """Handle scan range mode changes (QRadioButton auto-handles mutual exclusion)"""
+        if not checked:
+            # Ignore unchecked signal, only process checked signal
+            return
+        
+        sender = self.sender()
+        
+        if sender == self.scan_mode_all:
+            # All scans mode - disable single and range controls
+            self.scan_single_num.setEnabled(False)
+            self.scan_range_start.setEnabled(False)
+            self.scan_range_end.setEnabled(False)
+            self.update_scan_selection_info()
+            self.schedule_processing()
+            
+        elif sender == self.scan_mode_single:
+            # Single scan mode - enable single selector, disable range
+            self.scan_single_num.setEnabled(True)
+            self.scan_range_start.setEnabled(False)
+            self.scan_range_end.setEnabled(False)
+            self.update_scan_selection_info()
+            self.schedule_processing()
+            
+        elif sender == self.scan_mode_range:
+            # Range mode - enable range selectors, disable single
+            self.scan_single_num.setEnabled(False)
+            self.scan_range_start.setEnabled(True)
+            self.scan_range_end.setEnabled(True)
+            self.update_scan_selection_info()
+            self.schedule_processing()
+    
+    def update_scan_selection_info(self):
+        """Update scan selection info label"""
+        if not hasattr(self, 'scan_count') or self.scan_count == 0:
+            self.scan_selection_info.setText("Load data to enable scan selection")
+            return
+        
+        if self.scan_mode_all.isChecked():
+            self.scan_selection_info.setText(
+                f"<b>Mode:</b> All Scans<br>"
+                f"<b>Selected:</b> {self.scan_count} scans<br>"
+                f"<b>Range:</b> 0 to {self.scan_count - 1}"
+            )
+        elif self.scan_mode_single.isChecked():
+            scan_num = self.scan_single_num.value()
+            self.scan_selection_info.setText(
+                f"<b>Mode:</b> Single Scan<br>"
+                f"<b>Selected:</b> Scan #{scan_num}<br>"
+                f"<b>Total Available:</b> {self.scan_count} scans"
+            )
+        elif self.scan_mode_range.isChecked():
+            start = self.scan_range_start.value()
+            end = self.scan_range_end.value()
+            count = max(0, end - start + 1)
+            self.scan_selection_info.setText(
+                f"<b>Mode:</b> Scan Range<br>"
+                f"<b>Selected:</b> {count} scans<br>"
+                f"<b>Range:</b> {start} to {end}"
+            )
+    
+    def get_selected_scan_indices(self):
+        """Get list of selected scan indices based on current mode
+        
+        This is the interface for future good scans integration.
+        Returns list of scan indices to process.
+        
+        Returns:
+            list: List of scan indices to process
+        """
+        if not hasattr(self, 'scan_count') or self.scan_count == 0:
+            return []
+        
+        if self.scan_mode_all.isChecked():
+            # All scans
+            return list(range(self.scan_count))
+        
+        elif self.scan_mode_single.isChecked():
+            # Single scan
+            return [self.scan_single_num.value()]
+        
+        elif self.scan_mode_range.isChecked():
+            # Scan range
+            start = self.scan_range_start.value()
+            end = self.scan_range_end.value()
+            if start <= end:
+                return list(range(start, end + 1))
+            else:
+                return []
+        
+        return []
+    
     def schedule_processing(self):
         """Schedule processing with debounce"""
         if self.halp is not None:
@@ -1631,6 +1813,19 @@ class EnhancedNMRProcessingUI(QMainWindow):
             )
             
             self.scans_label.setText(str(self.scan_count))
+            
+            # Initialize scan selection controls
+            if self.scan_count > 0:
+                # Update spin box ranges
+                self.scan_single_num.setMaximum(self.scan_count - 1)
+                self.scan_single_num.setValue(0)
+                self.scan_range_start.setMaximum(self.scan_count - 1)
+                self.scan_range_start.setValue(0)
+                self.scan_range_end.setMaximum(self.scan_count - 1)
+                self.scan_range_end.setValue(self.scan_count - 1)
+                
+                # Update info label
+                self.update_scan_selection_info()
             
             self.process_btn.setEnabled(True)
             self.save_params_btn.setEnabled(True)
