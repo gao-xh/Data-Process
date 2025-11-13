@@ -1400,6 +1400,95 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq_group.setLayout(freq_layout)
         layout.addWidget(freq_group)
         
+        # SNR Calculation Settings
+        snr_group = QGroupBox("SNR Calculation Range")
+        snr_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        snr_layout = QGridLayout()
+        snr_layout.setSpacing(10)
+        
+        # Signal range
+        signal_label = QLabel("Signal Range (kHz):")
+        signal_label.setStyleSheet("font-size: 10px;")
+        snr_layout.addWidget(signal_label, 0, 0)
+        
+        signal_range_layout = QHBoxLayout()
+        signal_range_layout.setSpacing(5)
+        
+        self.signal_range_min = QDoubleSpinBox()
+        self.signal_range_min.setRange(0, 1000)
+        self.signal_range_min.setValue(11)
+        self.signal_range_min.setDecimals(1)
+        self.signal_range_min.setSingleStep(0.5)
+        self.signal_range_min.setStyleSheet("font-size: 10px;")
+        self.signal_range_min.valueChanged.connect(self.schedule_processing)
+        signal_range_layout.addWidget(self.signal_range_min)
+        
+        signal_range_layout.addWidget(QLabel("to"))
+        
+        self.signal_range_max = QDoubleSpinBox()
+        self.signal_range_max.setRange(0, 1000)
+        self.signal_range_max.setValue(14)
+        self.signal_range_max.setDecimals(1)
+        self.signal_range_max.setSingleStep(0.5)
+        self.signal_range_max.setStyleSheet("font-size: 10px;")
+        self.signal_range_max.valueChanged.connect(self.schedule_processing)
+        signal_range_layout.addWidget(self.signal_range_max)
+        
+        snr_layout.addLayout(signal_range_layout, 0, 1)
+        
+        # Noise range
+        noise_label = QLabel("Noise Range (kHz):")
+        noise_label.setStyleSheet("font-size: 10px;")
+        snr_layout.addWidget(noise_label, 1, 0)
+        
+        noise_range_layout = QHBoxLayout()
+        noise_range_layout.setSpacing(5)
+        
+        self.noise_range_min = QDoubleSpinBox()
+        self.noise_range_min.setRange(0, 1000)
+        self.noise_range_min.setValue(350)
+        self.noise_range_min.setDecimals(1)
+        self.noise_range_min.setSingleStep(1.0)
+        self.noise_range_min.setStyleSheet("font-size: 10px;")
+        self.noise_range_min.valueChanged.connect(self.schedule_processing)
+        noise_range_layout.addWidget(self.noise_range_min)
+        
+        noise_range_layout.addWidget(QLabel("to"))
+        
+        self.noise_range_max = QDoubleSpinBox()
+        self.noise_range_max.setRange(0, 1000)
+        self.noise_range_max.setValue(400)
+        self.noise_range_max.setDecimals(1)
+        self.noise_range_max.setSingleStep(1.0)
+        self.noise_range_max.setStyleSheet("font-size: 10px;")
+        self.noise_range_max.valueChanged.connect(self.schedule_processing)
+        noise_range_layout.addWidget(self.noise_range_max)
+        
+        snr_layout.addLayout(noise_range_layout, 1, 1)
+        
+        # Info label
+        snr_info = QLabel("Adjust these ranges to match your sample's signal and noise regions")
+        snr_info.setWordWrap(True)
+        snr_info.setStyleSheet("font-size: 9px; color: #757575; font-style: italic;")
+        snr_layout.addWidget(snr_info, 2, 0, 1, 2)
+        
+        snr_group.setLayout(snr_layout)
+        layout.addWidget(snr_group)
+        
         layout.addStretch()
         return tab
     
@@ -1986,8 +2075,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # SNR calculation
         if HAS_NMRDUINO:
             try:
-                frequency_range_snr = [11, 14]
-                noise_range_snr = [350, 400]
+                # Use user-defined ranges from UI
+                frequency_range_snr = [self.signal_range_min.value(), self.signal_range_max.value()]
+                noise_range_snr = [self.noise_range_min.value(), self.noise_range_max.value()]
                 snr = nmr_util.snr_calc(freq_axis, spectrum_abs, 
                                        frequency_range_snr, noise_range_snr)
                 
