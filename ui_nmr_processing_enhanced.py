@@ -275,14 +275,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # View menu
         view_menu = menubar.addMenu('View')
         
-        # Mode toggle
-        self.comparison_mode_action = view_menu.addAction('Enable Comparison Mode')
-        self.comparison_mode_action.setCheckable(True)
-        self.comparison_mode_action.setChecked(False)
-        self.comparison_mode_action.triggered.connect(self.toggle_comparison_mode)
-        
-        view_menu.addSeparator()
-        
         reset_layout_action = view_menu.addAction('Reset Layout')
         reset_layout_action.triggered.connect(self.reset_layout)
         
@@ -303,6 +295,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         process_action = process_menu.addAction('Process Data')
         process_action.setShortcut('F5')
         process_action.triggered.connect(self.process_data)
+        
+        # Tools menu
+        tools_menu = menubar.addMenu('Tools')
+        
+        # Comparison mode toggle
+        self.comparison_mode_action = tools_menu.addAction('Enable Comparison Mode')
+        self.comparison_mode_action.setCheckable(True)
+        self.comparison_mode_action.setChecked(False)
+        self.comparison_mode_action.triggered.connect(self.toggle_comparison_mode)
         
         # Help menu
         help_menu = menubar.addMenu('Help')
