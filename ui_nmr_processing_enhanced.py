@@ -153,15 +153,24 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        # Data
+        # Comparison mode flag
+        self.comparison_mode = False
+        
+        # Data A (original/primary)
         self.halp = None
         self.sampling_rate = None
         self.acq_time = None
         self.scan_count = 0
         self.current_path = None
-        
-        # Processing results
         self.processed = None
+        
+        # Data B (comparison)
+        self.halp_b = None
+        self.sampling_rate_b = None
+        self.acq_time_b = None
+        self.scan_count_b = 0
+        self.current_path_b = None
+        self.processed_b = None
         
         # Worker thread
         self.worker = None
@@ -176,6 +185,20 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'trunc_end': 10,
             'apod_t2star': 0.0
         }
+        
+        # Parameters for Data B (independent mode)
+        self.params_b = {
+            'zf_factor': 0.0,
+            'use_hanning': 0,
+            'conv_points': 300,
+            'poly_order': 2,
+            'trunc_start': 10,
+            'trunc_end': 10,
+            'apod_t2star': 0.0
+        }
+        
+        # Use same parameters for both datasets
+        self.use_same_params = True
         
         # Auto-process timer (debounce)
         self.process_timer = QTimer()
@@ -251,6 +274,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # View menu
         view_menu = menubar.addMenu('View')
+        
+        # Mode toggle
+        self.comparison_mode_action = view_menu.addAction('Enable Comparison Mode')
+        self.comparison_mode_action.setCheckable(True)
+        self.comparison_mode_action.setChecked(False)
+        self.comparison_mode_action.triggered.connect(self.toggle_comparison_mode)
+        
+        view_menu.addSeparator()
         
         reset_layout_action = view_menu.addAction('Reset Layout')
         reset_layout_action.triggered.connect(self.reset_layout)
@@ -480,6 +511,138 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         data_group.setLayout(data_layout)
         layout.addWidget(data_group)
+        
+        # Data B Loading (for comparison mode)
+        self.data_b_group = QGroupBox("Data B Loading (Comparison)")
+        self.data_b_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e3f2fd;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #f5f9fc;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #1976d2;
+            }
+        """)
+        self.data_b_group.setVisible(False)  # Hidden by default
+        
+        data_b_layout = QVBoxLayout()
+        data_b_layout.setSpacing(8)
+        
+        load_b_btn = QPushButton("Load Data B Folder")
+        load_b_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                padding: 10px 16px;
+                font-weight: bold;
+                font-size: 11px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QPushButton:pressed {
+                background-color: #0d47a1;
+            }
+        """)
+        load_b_btn.clicked.connect(self.load_folder_b)
+        data_b_layout.addWidget(load_b_btn)
+        
+        self.data_b_info = QLabel("No data B loaded")
+        self.data_b_info.setWordWrap(True)
+        self.data_b_info.setStyleSheet("""
+            QLabel {
+                padding: 10px;
+                background-color: #ffffff;
+                border: 1px solid #bbdefb;
+                border-radius: 5px;
+                color: #616161;
+                font-size: 10px;
+            }
+        """)
+        data_b_layout.addWidget(self.data_b_info)
+        
+        self.data_b_group.setLayout(data_b_layout)
+        layout.addWidget(self.data_b_group)
+        
+        # Comparison Controls
+        self.comparison_controls_group = QGroupBox("Comparison Settings")
+        self.comparison_controls_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #424242;
+            }
+        """)
+        self.comparison_controls_group.setVisible(False)  # Hidden by default
+        
+        comparison_layout = QVBoxLayout()
+        comparison_layout.setSpacing(8)
+        
+        # Parameters sync option
+        self.same_params_checkbox = QCheckBox("Use Same Parameters for Both Datasets")
+        self.same_params_checkbox.setChecked(True)
+        self.same_params_checkbox.setStyleSheet("font-size: 10px;")
+        self.same_params_checkbox.stateChanged.connect(self.on_same_params_changed)
+        comparison_layout.addWidget(self.same_params_checkbox)
+        
+        # Display mode
+        display_label = QLabel("Display Mode:")
+        display_label.setStyleSheet("font-size: 10px; font-weight: bold; margin-top: 10px;")
+        comparison_layout.addWidget(display_label)
+        
+        self.display_side_by_side = QRadioButton("Side by Side")
+        self.display_side_by_side.setChecked(True)
+        self.display_side_by_side.setStyleSheet("font-size: 10px;")
+        comparison_layout.addWidget(self.display_side_by_side)
+        
+        self.display_overlay = QRadioButton("Overlay")
+        self.display_overlay.setStyleSheet("font-size: 10px;")
+        comparison_layout.addWidget(self.display_overlay)
+        
+        # Apply comparison button
+        apply_comparison_btn = QPushButton("Apply Comparison")
+        apply_comparison_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #43a047;
+                color: white;
+                padding: 8px;
+                font-weight: bold;
+                font-size: 10px;
+                border: none;
+                border-radius: 4px;
+                margin-top: 10px;
+            }
+            QPushButton:hover {
+                background-color: #388e3c;
+            }
+            QPushButton:pressed {
+                background-color: #2e7d32;
+            }
+        """)
+        apply_comparison_btn.clicked.connect(self.apply_comparison)
+        comparison_layout.addWidget(apply_comparison_btn)
+        
+        self.comparison_controls_group.setLayout(comparison_layout)
+        layout.addWidget(self.comparison_controls_group)
         
         # Scan Selection Group
         scan_group = QGroupBox("Scan Selection")
@@ -2491,6 +2654,31 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         event.accept()
     
+    def toggle_comparison_mode(self, checked):
+        """Toggle between single and comparison mode"""
+        self.comparison_mode = checked
+        
+        if checked:
+            self.comparison_mode_action.setText('Disable Comparison Mode')
+            # Show comparison UI elements
+            if hasattr(self, 'data_b_group'):
+                self.data_b_group.setVisible(True)
+            if hasattr(self, 'comparison_controls_group'):
+                self.comparison_controls_group.setVisible(True)
+            QMessageBox.information(self, "Comparison Mode", 
+                                   "Comparison mode enabled!\n\n"
+                                   "You can now:\n"
+                                   "1. Load a second dataset (Data B)\n"
+                                   "2. Choose to use same or independent parameters\n"
+                                   "3. View side-by-side or overlaid comparison")
+        else:
+            self.comparison_mode_action.setText('Enable Comparison Mode')
+            # Hide comparison UI elements
+            if hasattr(self, 'data_b_group'):
+                self.data_b_group.setVisible(False)
+            if hasattr(self, 'comparison_controls_group'):
+                self.comparison_controls_group.setVisible(False)
+    
     def save_window_state(self):
         """Save window geometry and splitter states"""
         self.settings.setValue('geometry', self.saveGeometry())
@@ -2510,6 +2698,91 @@ class EnhancedNMRProcessingUI(QMainWindow):
         plot_splitter_state = self.settings.value('plot_splitter')
         if plot_splitter_state:
             self.plot_splitter.restoreState(plot_splitter_state)
+    
+    def load_folder_b(self):
+        """Load Data B for comparison"""
+        folder = QFileDialog.getExistingDirectory(self, "Select Data B Folder")
+        if not folder:
+            return
+        
+        try:
+            self.current_path_b = folder
+            
+            if HAS_NMRDUINO:
+                # Try to load compiled data
+                compiled_path = os.path.join(folder, "halp_compiled.npy")
+                if os.path.exists(compiled_path):
+                    self.halp_b = np.load(compiled_path)
+                    self.sampling_rate_b = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
+                    self.acq_time_b = np.load(os.path.join(folder, "acq_time_compiled.npy"))
+                    self.scan_count_b = nmr_util.scan_number_extraction(folder)
+                else:
+                    # Load and compile
+                    compiled = nmr_util.nmrduino_dat_interp(folder, 0)
+                    self.halp_b = compiled[0]
+                    self.sampling_rate_b = compiled[1]
+                    self.acq_time_b = compiled[2]
+                    self.scan_count_b = nmr_util.scan_number_extraction(folder)
+                    
+                    # Save compiled
+                    np.save(compiled_path, self.halp_b)
+                    np.save(os.path.join(folder, "sampling_rate_compiled.npy"), self.sampling_rate_b)
+                    np.save(os.path.join(folder, "acq_time_compiled.npy"), self.acq_time_b)
+                    np.save(os.path.join(folder, "scan_count.npy"), self.scan_count_b)
+            else:
+                # Manual loading
+                compiled_path = os.path.join(folder, "halp_compiled.npy")
+                if os.path.exists(compiled_path):
+                    self.halp_b = np.load(compiled_path)
+                    self.sampling_rate_b = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
+                    self.acq_time_b = np.load(os.path.join(folder, "acq_time_compiled.npy"))
+                    
+                    # Load scan count if available
+                    scan_count_path = os.path.join(folder, "scan_count.npy")
+                    if os.path.exists(scan_count_path):
+                        self.scan_count_b = int(np.load(scan_count_path))
+                    else:
+                        dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
+                        self.scan_count_b = len(dat_files) if dat_files else 1
+                else:
+                    raise FileNotFoundError("No compiled data found. Please compile first or install nmrduino_util.")
+            
+            self.data_b_info.setText(
+                f"<b>Loaded:</b> {os.path.basename(folder)}<br>"
+                f"<b>Points:</b> {len(self.halp_b)}<br>"
+                f"<b>Sampling:</b> {self.sampling_rate_b:.1f} Hz<br>"
+                f"<b>Acq Time:</b> {self.acq_time_b:.3f} s<br>"
+                f"<b>Scans:</b> {self.scan_count_b}"
+            )
+            
+            QMessageBox.information(self, "Data B Loaded", 
+                                   f"Data B loaded successfully!\n\n"
+                                   f"Folder: {os.path.basename(folder)}\n"
+                                   f"Points: {len(self.halp_b)}\n"
+                                   f"Scans: {self.scan_count_b}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
+    
+    def on_same_params_changed(self, state):
+        """Handle same parameters checkbox change"""
+        self.use_same_params = (state == Qt.Checked)
+        if self.use_same_params:
+            # Copy params A to params B
+            self.params_b = self.params.copy()
+    
+    def apply_comparison(self):
+        """Apply comparison and update plots"""
+        if self.halp is None:
+            QMessageBox.warning(self, "No Data", "Please load Data A first!")
+            return
+        
+        if self.halp_b is None:
+            QMessageBox.warning(self, "No Data B", "Please load Data B for comparison!")
+            return
+        
+        # Process both datasets
+        self.process_data()
 
 
 def main():
