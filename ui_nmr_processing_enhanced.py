@@ -2807,7 +2807,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     peak_height = np.max(spectrum_abs[signal_idx])
                 else:
                     peak_height = np.max(spectrum_abs)  # Fallback to global max
-                self.peak_label.setText(f"{peak_height:.1f}")
                 
                 snr = nmr_util.snr_calc(freq_axis, spectrum_abs, 
                                        frequency_range_snr, noise_range_snr)
@@ -2815,7 +2814,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 # Calculate noise level
                 noise_idx = (freq_axis >= noise_range_snr[0]) & (freq_axis <= noise_range_snr[1])
                 noise_level = np.std(spectrum_abs[noise_idx])
-                self.noise_label.setText(f"{noise_level:.2f}")
                 
                 results.append("\n═══ Quality Metrics ═══")
                 
@@ -3249,11 +3247,20 @@ class EnhancedNMRProcessingUI(QMainWindow):
     
     def closeEvent(self, event):
         """Handle window close event"""
+        # Stop processing worker if running
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
-            self.worker.wait(1000)
-            if self.worker.isRunning():
+            # Wait up to 3 seconds for graceful shutdown
+            if not self.worker.wait(3000):
+                # Force terminate if still running
                 self.worker.terminate()
+                # Wait a bit more for termination
+                self.worker.wait(1000)
+        
+        # Cleanup worker
+        if self.worker is not None:
+            self.worker.deleteLater()
+            self.worker = None
         
         # Close all maximized windows
         if hasattr(self, '_maximized_windows'):

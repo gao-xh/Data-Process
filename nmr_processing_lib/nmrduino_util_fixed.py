@@ -199,8 +199,4 @@ def snr_calc(xf, yf, peak_freq_range, noise_freq_range, nowarn=False):
     # Calculate SNR
     signal_to_noise = max_val / avg_noise_power
     
-    if not nowarn:
-        print(f"SNR = {signal_to_noise:.2f}")
-        print(f"Peak height = {max_val:.2f}")
-    
     return signal_to_noise
