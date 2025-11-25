@@ -28,9 +28,22 @@ from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSettings
 from PySide6.QtGui import QFont
 
 import matplotlib
-matplotlib.use('Qt5Agg')
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+try:
+    # Try to use QtAgg (preferred for PySide6/PyQt6)
+    matplotlib.use('QtAgg')
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+except ImportError:
+    try:
+        # Fallback to Qt5Agg (for PySide2/PyQt5)
+        matplotlib.use('Qt5Agg')
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+    except ImportError:
+        # Last resort
+        print("Warning: Could not load QtAgg or Qt5Agg backend for Matplotlib")
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
 import scipy.signal
@@ -3525,3 +3538,23 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Process both datasets
         self.process_data()
+
+
+def main():
+    app = QApplication(sys.argv)
+    
+    # Set font
+    font = QFont("Segoe UI", 9)
+    app.setFont(font)
+    
+    # Set style
+    app.setStyle('Fusion')
+    
+    window = EnhancedNMRProcessingUI()
+    window.show()
+    
+    sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    main()
