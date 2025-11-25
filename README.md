@@ -34,6 +34,12 @@ python ui_nmr_processing_enhanced.py
 - **Settings Persistence**: Window state and parameters saved automatically
 - **Keyboard Shortcuts**: Fast workflow (see below)
 
+### Data Comparison
+- **Side-by-Side View**: Compare two datasets in separate subplots
+- **Overlay (Unified)**: Overlay plots with shared Y-axis to compare relative amplitudes
+- **Overlay (Normalized)**: Overlay plots with independent normalization to compare peak shapes
+- **Parameter Sync**: Option to apply same processing parameters to both datasets or tune them independently
+
 ### Keyboard Shortcuts
 - `Ctrl+O`: Load data file
 - `Ctrl+S`: Save processing parameters
