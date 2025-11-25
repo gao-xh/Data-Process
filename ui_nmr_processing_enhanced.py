@@ -623,11 +623,18 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.display_side_by_side = QRadioButton("Side by Side")
         self.display_side_by_side.setChecked(True)
         self.display_side_by_side.setStyleSheet("font-size: 10px;")
+        self.display_side_by_side.toggled.connect(self.on_display_mode_changed)
         comparison_layout.addWidget(self.display_side_by_side)
         
-        self.display_overlay = QRadioButton("Overlay")
+        self.display_overlay = QRadioButton("Overlay (Unified Scale)")
         self.display_overlay.setStyleSheet("font-size: 10px;")
+        self.display_overlay.toggled.connect(self.on_display_mode_changed)
         comparison_layout.addWidget(self.display_overlay)
+        
+        self.display_overlay_norm = QRadioButton("Overlay (Normalized)")
+        self.display_overlay_norm.setStyleSheet("font-size: 10px;")
+        self.display_overlay_norm.toggled.connect(self.on_display_mode_changed)
+        comparison_layout.addWidget(self.display_overlay_norm)
         
         # Apply comparison button
         apply_comparison_btn = QPushButton("Apply Comparison")
@@ -2411,6 +2418,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Update params_b if using same parameters
         if self.use_same_params:
             self.params_b = self.params.copy()
+        else:
+            # Update params_b from UI controls with correct key mapping
+            self.params_b['conv_points'] = self.conv_spinbox_b.value()
+            self.params_b['poly_order'] = self.poly_spinbox_b.value()
+            self.params_b['trunc_start'] = self.trunc_spinbox_b.value()
+            self.params_b['trunc_end'] = 10  # Default fixed value
+            self.params_b['apod_t2star'] = self.t2_spinbox_b.value()
+            self.params_b['use_hanning'] = 1 if self.hanning_spinbox_b.value() > 0.1 else 0
+            # Map Zero Fill: treat > 0 as factor 1.0 (double) for safety
+            self.params_b['zf_factor'] = 1.0 if self.zerofill_spinbox_b.value() > 0 else 0.0
         
         # Reset processed_b to trigger reprocessing if in comparison mode
         if self.comparison_mode and self.halp_b is not None:
@@ -2518,8 +2535,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.plot_side_by_side_comparison()
             return
         
-        # Check if in comparison mode with overlay
-        if self.comparison_mode and self.processed_b is not None and self.display_overlay.isChecked():
+        # Check if in comparison mode with overlay (Unified or Normalized)
+        if self.comparison_mode and self.processed_b is not None and (self.display_overlay.isChecked() or self.display_overlay_norm.isChecked()):
             self.plot_overlay_comparison()
             return
         
@@ -2721,24 +2738,50 @@ class EnhancedNMRProcessingUI(QMainWindow):
         spectrum_b = self.processed_b['spectrum']
         acq_time_b = self.processed_b['acq_time_effective']
         
+        # Check if normalized mode
+        is_normalized = self.display_overlay_norm.isChecked()
+        
+        # Prepare data for plotting
+        y_time_a = np.real(time_data)
+        y_time_b = np.real(time_data_b)
+        y_spec_a = np.abs(spectrum)
+        y_spec_b = np.abs(spectrum_b)
+        
+        if is_normalized:
+            # Normalize to max amplitude = 1.0
+            max_time_a = np.max(np.abs(y_time_a))
+            max_time_b = np.max(np.abs(y_time_b))
+            if max_time_a > 0: y_time_a = y_time_a / max_time_a
+            if max_time_b > 0: y_time_b = y_time_b / max_time_b
+            
+            max_spec_a = np.max(y_spec_a)
+            max_spec_b = np.max(y_spec_b)
+            if max_spec_a > 0: y_spec_a = y_spec_a / max_spec_a
+            if max_spec_b > 0: y_spec_b = y_spec_b / max_spec_b
+            
+            ylabel = "Normalized Amplitude"
+        else:
+            ylabel = "Amplitude"
+        
         # Time domain - overlay
         time_axis = np.linspace(0, acq_time, len(time_data))
         time_axis_b = np.linspace(0, acq_time_b, len(time_data_b))
         
         self.time_canvas.fig.clear()
         self.time_canvas.axes = self.time_canvas.fig.add_subplot(111)
-        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8, alpha=0.8, label='Data A')
-        self.time_canvas.axes.plot(time_axis_b, np.real(time_data_b), 'r-', linewidth=0.8, alpha=0.6, label='Data B')
+        self.time_canvas.axes.plot(time_axis, y_time_a, 'b-', linewidth=0.8, alpha=0.8, label='Data A')
+        self.time_canvas.axes.plot(time_axis_b, y_time_b, 'r-', linewidth=0.8, alpha=0.6, label='Data B')
         
         # Set y-axis limits based on both datasets
-        y_max_a = np.max(np.abs(np.real(time_data)))
-        y_max_b = np.max(np.abs(np.real(time_data_b)))
+        y_max_a = np.max(np.abs(y_time_a))
+        y_max_b = np.max(np.abs(y_time_b))
         y_max_combined = max(y_max_a, y_max_b)
         self.time_canvas.axes.set_ylim(-1.1 * y_max_combined, 1.1 * y_max_combined)
         
         self.time_canvas.axes.set_xlabel('Time (s)', fontsize=10, fontweight='bold')
-        self.time_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.time_canvas.axes.set_title('Time Domain - Overlay Comparison', fontsize=11, fontweight='bold')
+        self.time_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
+        title_suffix = " (Normalized)" if is_normalized else ""
+        self.time_canvas.axes.set_title(f'Time Domain - Overlay Comparison{title_suffix}', fontsize=11, fontweight='bold')
         self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.time_canvas.axes.legend(fontsize=9)
         self.time_canvas.fig.tight_layout()
@@ -2749,8 +2792,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         self.freq1_canvas.fig.clear()
         self.freq1_canvas.axes = self.freq1_canvas.fig.add_subplot(111)
-        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
-        self.freq1_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+        self.freq1_canvas.axes.plot(freq_axis, y_spec_a, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        self.freq1_canvas.axes.plot(freq_axis_b, y_spec_b, 'r-', linewidth=1.0, alpha=0.6, label='Data B')
         self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         
         # Set y-axis limits based on both datasets in visible range
@@ -2758,16 +2801,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
         idx_visible_b = (freq_axis_b >= freq_range_low[0]) & (freq_axis_b <= freq_range_low[1])
         y_max_list = []
         if np.any(idx_visible_a):
-            y_max_list.append(np.max(np.abs(spectrum)[idx_visible_a]))
+            y_max_list.append(np.max(y_spec_a[idx_visible_a]))
         if np.any(idx_visible_b):
-            y_max_list.append(np.max(np.abs(spectrum_b)[idx_visible_b]))
+            y_max_list.append(np.max(y_spec_b[idx_visible_b]))
         if y_max_list:
             y_max_combined = max(y_max_list)
             self.freq1_canvas.axes.set_ylim(-0.05 * y_max_combined, 1.1 * y_max_combined)
         
         self.freq1_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
-        self.freq1_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.freq1_canvas.axes.set_title(f'Low Freq - Overlay ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=11, fontweight='bold')
+        self.freq1_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
+        self.freq1_canvas.axes.set_title(f'Low Freq Comparison{title_suffix} ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=11, fontweight='bold')
         self.freq1_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq1_canvas.axes.legend(fontsize=9)
         self.freq1_canvas.fig.tight_layout()
@@ -2778,25 +2821,24 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         self.freq2_canvas.fig.clear()
         self.freq2_canvas.axes = self.freq2_canvas.fig.add_subplot(111)
-        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
-        self.freq2_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+        self.freq2_canvas.axes.plot(freq_axis, y_spec_a, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        self.freq2_canvas.axes.plot(freq_axis_b, y_spec_b, 'r-', linewidth=1.0, alpha=0.6, label='Data B')
         self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
         
-        # Set y-axis limits based on both datasets in visible range
         idx_visible_a = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
         idx_visible_b = (freq_axis_b >= freq_range_high[0]) & (freq_axis_b <= freq_range_high[1])
         y_max_list = []
         if np.any(idx_visible_a):
-            y_max_list.append(np.max(np.abs(spectrum)[idx_visible_a]))
+            y_max_list.append(np.max(y_spec_a[idx_visible_a]))
         if np.any(idx_visible_b):
-            y_max_list.append(np.max(np.abs(spectrum_b)[idx_visible_b]))
+            y_max_list.append(np.max(y_spec_b[idx_visible_b]))
         if y_max_list:
             y_max_combined = max(y_max_list)
             self.freq2_canvas.axes.set_ylim(-0.05 * y_max_combined, 1.1 * y_max_combined)
-        
+            
         self.freq2_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
-        self.freq2_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        self.freq2_canvas.axes.set_title(f'High Freq - Overlay ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=11, fontweight='bold')
+        self.freq2_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
+        self.freq2_canvas.axes.set_title(f'High Freq Comparison{title_suffix} ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=11, fontweight='bold')
         self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq2_canvas.axes.legend(fontsize=9)
         self.freq2_canvas.fig.tight_layout()
@@ -3424,6 +3466,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
     
+    def on_display_mode_changed(self, checked):
+        """Handle display mode change"""
+        if checked:
+            self.plot_results()
+
     def on_same_params_changed(self, state):
         """Handle same parameters checkbox change"""
         self.use_same_params = (state == Qt.Checked)
@@ -3432,6 +3479,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.params_b = self.params.copy()
             # Hide Data B parameters group
             self.data_b_params_group.setVisible(False)
+            # Trigger reprocessing to apply A's params to B
+            if self.comparison_mode and self.halp_b is not None:
+                self.process_data()
         else:
             # Show Data B parameters group
             self.data_b_params_group.setVisible(True)
@@ -3443,23 +3493,25 @@ class EnhancedNMRProcessingUI(QMainWindow):
         """Update Data B parameter UI from params_b"""
         self.conv_spinbox_b.setValue(self.params_b.get('conv_points', 300))
         self.poly_spinbox_b.setValue(self.params_b.get('poly_order', 2))
-        self.trunc_spinbox_b.setValue(self.params_b.get('truncate_to', 1600))
-        self.t2_spinbox_b.setValue(self.params_b.get('t2star', 0.029))
-        self.hanning_spinbox_b.setValue(self.params_b.get('hanning_factor', 0.2))
-        self.zerofill_spinbox_b.setValue(self.params_b.get('zero_fill_to', 10000))
+        self.trunc_spinbox_b.setValue(self.params_b.get('trunc_start', 1600))
+        self.t2_spinbox_b.setValue(self.params_b.get('apod_t2star', 0.029))
+        # Map use_hanning (0/1) to spinbox (0.0/1.0)
+        self.hanning_spinbox_b.setValue(1.0 if self.params_b.get('use_hanning', 0) == 1 else 0.0)
+        # Map zf_factor to spinbox (0 or 10000)
+        self.zerofill_spinbox_b.setValue(10000 if self.params_b.get('zf_factor', 0.0) > 0 else 0)
     
     def apply_data_b_params(self):
-        """Apply Data B parameters from UI to params_b"""
+        """Apply Data B parameters from UI to params_b and process"""
         self.params_b['conv_points'] = self.conv_spinbox_b.value()
         self.params_b['poly_order'] = self.poly_spinbox_b.value()
-        self.params_b['truncate_to'] = self.trunc_spinbox_b.value()
-        self.params_b['t2star'] = self.t2_spinbox_b.value()
-        self.params_b['hanning_factor'] = self.hanning_spinbox_b.value()
-        self.params_b['zero_fill_to'] = self.zerofill_spinbox_b.value()
+        self.params_b['trunc_start'] = self.trunc_spinbox_b.value()
+        self.params_b['trunc_end'] = 10
+        self.params_b['apod_t2star'] = self.t2_spinbox_b.value()
+        self.params_b['use_hanning'] = 1 if self.hanning_spinbox_b.value() > 0.1 else 0
+        self.params_b['zf_factor'] = 1.0 if self.zerofill_spinbox_b.value() > 0 else 0.0
         
-        # Show confirmation
-        QMessageBox.information(self, "Parameters Applied", 
-                              "Data B parameters updated! Click 'Apply Comparison' to reprocess.")
+        # Trigger processing immediately
+        self.process_data()
     
     def apply_comparison(self):
         """Apply comparison and update plots"""
@@ -3473,23 +3525,3 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Process both datasets
         self.process_data()
-
-
-def main():
-    app = QApplication(sys.argv)
-    
-    # Set font
-    font = QFont("Segoe UI", 9)
-    app.setFont(font)
-    
-    # Set style
-    app.setStyle('Fusion')
-    
-    window = EnhancedNMRProcessingUI()
-    window.show()
-    
-    sys.exit(app.exec())
-
-
-if __name__ == '__main__':
-    main()
