@@ -2761,16 +2761,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         y_spec_b = np.abs(spectrum_b)
         
         if is_normalized:
-            # Normalize to max amplitude = 1.0
+            # Normalize Time Domain (Global)
             max_time_a = np.max(np.abs(y_time_a))
             max_time_b = np.max(np.abs(y_time_b))
             if max_time_a > 0: y_time_a = y_time_a / max_time_a
             if max_time_b > 0: y_time_b = y_time_b / max_time_b
-            
-            max_spec_a = np.max(y_spec_a)
-            max_spec_b = np.max(y_spec_b)
-            if max_spec_a > 0: y_spec_a = y_spec_a / max_spec_a
-            if max_spec_b > 0: y_spec_b = y_spec_b / max_spec_b
             
             ylabel = "Normalized Amplitude"
         else:
@@ -2803,10 +2798,27 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Frequency domain - low freq - overlay
         freq_range_low = [self.freq_low_min.value(), self.freq_low_max.value()]
         
+        # Prepare data for Low Freq (Local Normalization if needed)
+        y_spec_a_low = y_spec_a.copy()
+        y_spec_b_low = y_spec_b.copy()
+        
+        if is_normalized:
+            # Local normalization for Low Freq view
+            idx_visible_a = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
+            idx_visible_b = (freq_axis_b >= freq_range_low[0]) & (freq_axis_b <= freq_range_low[1])
+            
+            if np.any(idx_visible_a):
+                max_val = np.max(y_spec_a_low[idx_visible_a])
+                if max_val > 0: y_spec_a_low = y_spec_a_low / max_val
+            
+            if np.any(idx_visible_b):
+                max_val = np.max(y_spec_b_low[idx_visible_b])
+                if max_val > 0: y_spec_b_low = y_spec_b_low / max_val
+        
         self.freq1_canvas.fig.clear()
         self.freq1_canvas.axes = self.freq1_canvas.fig.add_subplot(111)
-        self.freq1_canvas.axes.plot(freq_axis, y_spec_a, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
-        self.freq1_canvas.axes.plot(freq_axis_b, y_spec_b, 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+        self.freq1_canvas.axes.plot(freq_axis, y_spec_a_low, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        self.freq1_canvas.axes.plot(freq_axis_b, y_spec_b_low, 'r-', linewidth=1.0, alpha=0.6, label='Data B')
         self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         
         # Set y-axis limits based on both datasets in visible range
@@ -2814,9 +2826,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         idx_visible_b = (freq_axis_b >= freq_range_low[0]) & (freq_axis_b <= freq_range_low[1])
         y_max_list = []
         if np.any(idx_visible_a):
-            y_max_list.append(np.max(y_spec_a[idx_visible_a]))
+            y_max_list.append(np.max(y_spec_a_low[idx_visible_a]))
         if np.any(idx_visible_b):
-            y_max_list.append(np.max(y_spec_b[idx_visible_b]))
+            y_max_list.append(np.max(y_spec_b_low[idx_visible_b]))
         if y_max_list:
             y_max_combined = max(y_max_list)
             self.freq1_canvas.axes.set_ylim(-0.05 * y_max_combined, 1.1 * y_max_combined)
@@ -2832,19 +2844,36 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Frequency domain - high freq - overlay
         freq_range_high = [self.freq_high_min.value(), self.freq_high_max.value()]
         
+        # Prepare data for High Freq (Local Normalization if needed)
+        y_spec_a_high = y_spec_a.copy()
+        y_spec_b_high = y_spec_b.copy()
+        
+        if is_normalized:
+            # Local normalization for High Freq view
+            idx_visible_a = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
+            idx_visible_b = (freq_axis_b >= freq_range_high[0]) & (freq_axis_b <= freq_range_high[1])
+            
+            if np.any(idx_visible_a):
+                max_val = np.max(y_spec_a_high[idx_visible_a])
+                if max_val > 0: y_spec_a_high = y_spec_a_high / max_val
+            
+            if np.any(idx_visible_b):
+                max_val = np.max(y_spec_b_high[idx_visible_b])
+                if max_val > 0: y_spec_b_high = y_spec_b_high / max_val
+        
         self.freq2_canvas.fig.clear()
         self.freq2_canvas.axes = self.freq2_canvas.fig.add_subplot(111)
-        self.freq2_canvas.axes.plot(freq_axis, y_spec_a, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
-        self.freq2_canvas.axes.plot(freq_axis_b, y_spec_b, 'r-', linewidth=1.0, alpha=0.6, label='Data B')
+        self.freq2_canvas.axes.plot(freq_axis, y_spec_a_high, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        self.freq2_canvas.axes.plot(freq_axis_b, y_spec_b_high, 'r-', linewidth=1.0, alpha=0.6, label='Data B')
         self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
         
         idx_visible_a = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
         idx_visible_b = (freq_axis_b >= freq_range_high[0]) & (freq_axis_b <= freq_range_high[1])
         y_max_list = []
         if np.any(idx_visible_a):
-            y_max_list.append(np.max(y_spec_a[idx_visible_a]))
+            y_max_list.append(np.max(y_spec_a_high[idx_visible_a]))
         if np.any(idx_visible_b):
-            y_max_list.append(np.max(y_spec_b[idx_visible_b]))
+            y_max_list.append(np.max(y_spec_b_high[idx_visible_b]))
         if y_max_list:
             y_max_combined = max(y_max_list)
             self.freq2_canvas.axes.set_ylim(-0.05 * y_max_combined, 1.1 * y_max_combined)
