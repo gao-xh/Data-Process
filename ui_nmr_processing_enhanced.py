@@ -84,6 +84,8 @@ class ProcessingWorker(QThread):
     
     def process(self):
         """Process following notebook workflow"""
+        if not self._running: return None
+        
         halp = self.halp.copy()
         sampling_rate = self.sampling_rate
         acq_time = self.acq_time
@@ -91,6 +93,7 @@ class ProcessingWorker(QThread):
         self.progress.emit("Applying Savgol filter...")
         
         # Step 1: Savgol filtering (baseline removal)
+        if not self._running: return None
         smooth_svd = scipy.signal.savgol_filter(
             halp, 
             int(self.params['conv_points']),
@@ -102,6 +105,7 @@ class ProcessingWorker(QThread):
         self.progress.emit("Applying truncation...")
         
         # Step 2: Time domain truncation
+        if not self._running: return None
         trunc_start = int(self.params['trunc_start'])
         trunc_end = int(self.params['trunc_end'])
         svd_corrected = svd_corrected[trunc_start:-trunc_end if trunc_end > 0 else None]
@@ -110,18 +114,21 @@ class ProcessingWorker(QThread):
         self.progress.emit("Applying apodization...")
         
         # Step 3: Apodization (exponential decay)
+        if not self._running: return None
         t = np.linspace(0, acq_time_effective, len(svd_corrected))
         apodization_window = np.exp(-self.params['apod_t2star'] * t)
         svd_corrected = svd_corrected * apodization_window
         
         # Step 4: Hanning window
         if int(self.params['use_hanning']) == 1:
+            if not self._running: return None
             self.progress.emit("Applying Hanning window...")
             svd_corrected = np.hanning(len(svd_corrected)) * svd_corrected
         
         self.progress.emit("Applying zero filling...")
         
         # Step 5: Zero filling
+        if not self._running: return None
         zf_factor = self.params['zf_factor']
         if zf_factor > 0:
             zf_length = int(len(svd_corrected) * zf_factor)
@@ -133,10 +140,13 @@ class ProcessingWorker(QThread):
         self.progress.emit("Computing FFT...")
         
         # Step 6: FFT
+        if not self._running: return None
         yf = fft(svd_corrected)
         xf = np.linspace(0, sampling_rate, len(yf))
         
         self.progress.emit("Processing complete!")
+        
+        if not self._running: return None
         
         return {
             'time_data': svd_corrected,
@@ -2372,9 +2382,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
             return
         
         # Stop previous worker if running
-        if self.worker is not None and self.worker.isRunning():
-            self.worker.stop()
-            self.worker.wait()
+        if self.worker is not None:
+            if self.worker.isRunning():
+                self.worker.stop()
+                self.worker.wait(2000)
+                if self.worker.isRunning():
+                    self.worker.terminate()
+                    self.worker.wait(1000)
+            # Cleanup old worker
+            self.worker.deleteLater()
+            self.worker = None
         
         # Update parameters from UI
         self.params = {
@@ -2433,6 +2450,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # If in comparison mode and Data B needs processing
         if self.comparison_mode and self.halp_b is not None and self.processed_b is None:
+            # Cleanup Data A worker
+            if self.worker is not None:
+                self.worker.deleteLater()
+                self.worker = None
+            
             # Process Data B
             self.progress_label.setText("Processing Data B...")
             self.worker = ProcessingWorker(
@@ -2447,6 +2469,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.worker.start()
             return
         
+        # Cleanup worker after processing
+        if self.worker is not None:
+            self.worker.deleteLater()
+            self.worker = None
+        
         self.progress_bar.setVisible(False)
         self.progress_label.setText("")
         self.plot_results()
@@ -2457,6 +2484,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def on_processing_b_finished(self, result):
         """Handle Data B processing finished"""
         self.processed_b = result
+        
+        # Cleanup worker after Data B processing
+        if self.worker is not None:
+            self.worker.deleteLater()
+            self.worker = None
+        
         self.progress_bar.setVisible(False)
         self.progress_label.setText("")
         self.plot_results()
@@ -2466,6 +2499,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
     @Slot(str)
     def on_processing_error(self, error):
         """Handle processing error"""
+        # Cleanup worker on error
+        if self.worker is not None:
+            self.worker.deleteLater()
+            self.worker = None
+        
         self.progress_bar.setVisible(False)
         self.progress_label.setText("")
         QMessageBox.critical(self, "Processing Error", f"Failed to process:\n{error}")
@@ -3247,6 +3285,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
     
     def closeEvent(self, event):
         """Handle window close event"""
+        # Stop auto-process timer
+        if hasattr(self, 'process_timer') and self.process_timer.isActive():
+            self.process_timer.stop()
+
         # Stop processing worker if running
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
