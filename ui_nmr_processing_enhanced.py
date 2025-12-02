@@ -49,6 +49,18 @@ from matplotlib.figure import Figure
 import scipy.signal
 from scipy.fft import fft
 
+# Import ZULF algorithms
+try:
+    from nmr_processing_lib.processing.zulf_algorithms import (
+        backward_linear_prediction, apply_phase_correction, auto_phase
+    )
+except ImportError:
+    print("Warning: Could not import ZULF algorithms. Phase correction disabled.")
+    # Define dummy functions if import fails
+    def backward_linear_prediction(data, n, order): return data
+    def apply_phase_correction(spec, p0, p1): return spec
+    def auto_phase(spec): return 0, 0
+
 # Import nmrduino_util (using fixed version with proper path handling)
 try:
     from nmr_processing_lib import nmrduino_util_fixed as nmr_util
@@ -115,6 +127,14 @@ class ProcessingWorker(QThread):
         )
         svd_corrected = halp - smooth_svd
         
+        # Step 1.5: Backward Linear Prediction (Dead-time reconstruction)
+        if self.params.get('enable_recon', False):
+            self.progress.emit("Reconstructing dead-time...")
+            n_dead = int(self.params.get('recon_points', 0))
+            order = int(self.params.get('recon_order', 10))
+            if n_dead > 0:
+                svd_corrected = backward_linear_prediction(svd_corrected, n_dead, order)
+
         self.progress.emit("Applying truncation...")
         
         # Step 2: Time domain truncation
@@ -157,6 +177,17 @@ class ProcessingWorker(QThread):
         yf = fft(svd_corrected)
         xf = np.linspace(0, sampling_rate, len(yf))
         
+        # Step 7: Phase Correction
+        self.progress.emit("Applying phase correction...")
+        phi0 = self.params.get('phase0', 0.0)
+        phi1 = self.params.get('phase1', 0.0)
+        
+        # Cache the unphased spectrum for fast updates
+        spectrum_complex = yf.copy()
+        
+        # Apply phase
+        yf_phased = apply_phase_correction(yf, phi0, phi1)
+        
         self.progress.emit("Processing complete!")
         
         if not self._running: return None
@@ -164,7 +195,8 @@ class ProcessingWorker(QThread):
         return {
             'time_data': svd_corrected,
             'freq_axis': xf,
-            'spectrum': yf,
+            'spectrum': yf_phased,
+            'spectrum_complex': spectrum_complex,
             'acq_time_effective': acq_time * (1 + zf_factor),
             'baseline': smooth_svd
         }
@@ -206,7 +238,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'poly_order': 2,
             'trunc_start': 10,
             'trunc_end': 10,
-            'apod_t2star': 0.0
+            'apod_t2star': 0.0,
+            # New params for ZULF
+            'phase0': 0.0,
+            'phase1': 0.0,
+            'enable_recon': False,
+            'recon_points': 0,
+            'recon_order': 10
         }
         
         # Parameters for Data B (independent mode)
@@ -217,7 +255,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'poly_order': 2,
             'trunc_start': 10,
             'trunc_end': 10,
-            'apod_t2star': 0.0
+            'apod_t2star': 0.0,
+            # New params for ZULF
+            'phase0': 0.0,
+            'phase1': 0.0,
+            'enable_recon': False,
+            'recon_points': 0,
+            'recon_order': 10
         }
         
         # Use same parameters for both datasets
@@ -1556,7 +1600,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         row += 1
         
         hanning_title = QLabel("Hanning Window:")
-        hanning_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        hanning_title.setStyleSheet("font-size: 9px; font-weight: bold;")
         apod_layout.addWidget(hanning_title, row, 0)
         self.use_hanning = QCheckBox("Apply Hanning")
         self.use_hanning.setStyleSheet("""
@@ -1595,6 +1639,116 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
         layout.setContentsMargins(10, 10, 10, 10)
+        
+        # --- NEW: Dead-time Reconstruction ---
+        recon_group = QGroupBox("Dead-time Reconstruction (Backward LP)")
+        recon_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 11px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #d32f2f;
+            }
+        """)
+        recon_layout = QHBoxLayout()
+        
+        self.enable_recon = QCheckBox("Enable Reconstruction")
+        self.enable_recon.stateChanged.connect(self.on_param_changed)
+        recon_layout.addWidget(self.enable_recon)
+        
+        recon_layout.addWidget(QLabel("Points:"))
+        self.recon_points = QSpinBox()
+        self.recon_points.setRange(0, 100)
+        self.recon_points.setValue(0)
+        self.recon_points.valueChanged.connect(self.on_param_changed)
+        recon_layout.addWidget(self.recon_points)
+        
+        recon_group.setLayout(recon_layout)
+        layout.addWidget(recon_group)
+        
+        # --- NEW: Phase Correction ---
+        phase_group = QGroupBox("Phase Correction")
+        phase_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 11px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: #1976d2;
+            }
+        """)
+        phase_layout = QGridLayout()
+        
+        # Phase 0
+        phase_layout.addWidget(QLabel("Phase 0:"), 0, 0)
+        self.phase0_slider = QSlider(Qt.Horizontal)
+        self.phase0_slider.setRange(-180, 180)
+        self.phase0_slider.setValue(0)
+        self.phase0_slider.valueChanged.connect(self.on_phase_changed) # Special handler for fast update
+        phase_layout.addWidget(self.phase0_slider, 0, 1)
+        self.phase0_spin = QDoubleSpinBox()
+        self.phase0_spin.setRange(-180, 180)
+        self.phase0_spin.setSingleStep(1)
+        self.phase0_spin.valueChanged.connect(self.on_phase_spin_changed)
+        phase_layout.addWidget(self.phase0_spin, 0, 2)
+        
+        # Phase 1
+        phase_layout.addWidget(QLabel("Phase 1:"), 1, 0)
+        self.phase1_slider = QSlider(Qt.Horizontal)
+        self.phase1_slider.setRange(-10000, 10000)
+        self.phase1_slider.setValue(0)
+        self.phase1_slider.valueChanged.connect(self.on_phase_changed)
+        phase_layout.addWidget(self.phase1_slider, 1, 1)
+        self.phase1_spin = QDoubleSpinBox()
+        self.phase1_spin.setRange(-10000, 10000)
+        self.phase1_spin.setSingleStep(10)
+        self.phase1_spin.valueChanged.connect(self.on_phase_spin_changed)
+        phase_layout.addWidget(self.phase1_spin, 1, 2)
+        
+        # Auto Phase
+        self.auto_phase_btn = QPushButton("Auto Phase")
+        self.auto_phase_btn.clicked.connect(self.run_auto_phase)
+        phase_layout.addWidget(self.auto_phase_btn, 2, 0, 1, 3)
+        
+        phase_group.setLayout(phase_layout)
+        layout.addWidget(phase_group)
+        
+        # --- NEW: Display Mode ---
+        display_group = QGroupBox("Spectrum View Mode")
+        display_layout = QHBoxLayout()
+        
+        self.view_real = QRadioButton("Real (Absorption)")
+        self.view_real.setChecked(True)
+        self.view_real.toggled.connect(self.update_plot_view)
+        display_layout.addWidget(self.view_real)
+        
+        self.view_imag = QRadioButton("Imaginary (Dispersion)")
+        self.view_imag.toggled.connect(self.update_plot_view)
+        display_layout.addWidget(self.view_imag)
+        
+        self.view_mag = QRadioButton("Magnitude")
+        self.view_mag.toggled.connect(self.update_plot_view)
+        display_layout.addWidget(self.view_mag)
+        
+        display_group.setLayout(display_layout)
+        layout.addWidget(display_group)
         
         # Zero filling
         zf_group = QGroupBox("Zero Filling")
@@ -2425,7 +2579,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'freq_low_min': self.freq_low_min.value(),
             'freq_low_max': self.freq_low_max.value(),
             'freq_high_min': self.freq_high_min.value(),
-            'freq_high_max': self.freq_high_max.value()
+            'freq_high_max': self.freq_high_max.value(),
+            # NEW Params
+            'enable_recon': self.enable_recon.isChecked(),
+            'recon_points': self.recon_points.value(),
+            'phase0': self.phase0_spin.value(),
+            'phase1': self.phase1_spin.value()
         }
         
         # Update params_b if using same parameters
@@ -2558,23 +2717,25 @@ class EnhancedNMRProcessingUI(QMainWindow):
         spectrum = self.processed['spectrum']
         acq_time = self.processed['acq_time_effective']
         
+        # Determine plot data based on view mode
+        if self.view_real.isChecked():
+            plot_data = np.real(spectrum)
+            ylabel = "Amplitude (Real)"
+        elif self.view_imag.isChecked():
+            plot_data = np.imag(spectrum)
+            ylabel = "Amplitude (Imag)"
+        else:
+            plot_data = np.abs(spectrum)
+            ylabel = "Magnitude"
+        
         # Time domain
         time_axis = np.linspace(0, acq_time, len(time_data))
         self.time_canvas.axes.clear()
         self.time_canvas.axes.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8, alpha=0.8, label='Data A')
         
-        # Add Data B if in comparison mode and side-by-side
-        if self.comparison_mode and self.processed_b is not None:
-            time_data_b = self.processed_b['time_data']
-            acq_time_b = self.processed_b['acq_time_effective']
-            time_axis_b = np.linspace(0, acq_time_b, len(time_data_b))
-            self.time_canvas.axes.plot(time_axis_b, np.real(time_data_b), 'r-', linewidth=0.8, alpha=0.6, label='Data B')
-            self.time_canvas.axes.legend(fontsize=9)
-        
         self.time_canvas.axes.set_xlabel('Time (s)', fontsize=10, fontweight='bold')
         self.time_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        title = 'Time Domain Signal - Comparison' if self.comparison_mode else 'Time Domain Signal (After Processing)'
-        self.time_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
+        self.time_canvas.axes.set_title('Time Domain Signal', fontsize=11, fontweight='bold')
         self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)
         self.time_canvas.fig.tight_layout()
@@ -2584,26 +2745,21 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq_range_low = [self.freq_low_min.value(), self.freq_low_max.value()]
         
         self.freq1_canvas.axes.clear()
-        self.freq1_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
-        
-        # Add Data B
-        if self.comparison_mode and self.processed_b is not None:
-            freq_axis_b = self.processed_b['freq_axis']
-            spectrum_b = self.processed_b['spectrum']
-            self.freq1_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
-            self.freq1_canvas.axes.legend(fontsize=9)
+        self.freq1_canvas.axes.plot(freq_axis, plot_data, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
         
         self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         idx_visible = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
         if np.any(idx_visible):
-            y_visible = np.abs(spectrum)[idx_visible]
+            y_visible = plot_data[idx_visible]
             y_max = np.max(y_visible)
-            self.freq1_canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
+            y_min = np.min(y_visible)
+            range_y = y_max - y_min
+            if range_y == 0: range_y = 1.0
+            self.freq1_canvas.axes.set_ylim(y_min - 0.05 * range_y, y_max + 0.05 * range_y)
+            
         self.freq1_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
-        self.freq1_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        title = f'Low Freq Comparison (View: {freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)' if self.comparison_mode \
-                else f'Low Frequency Spectrum (View: {freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)'
-        self.freq1_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
+        self.freq1_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
+        self.freq1_canvas.axes.set_title(f'Low Frequency Spectrum ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=11, fontweight='bold')
         self.freq1_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq1_canvas.fig.tight_layout()
         self.freq1_canvas.draw()
@@ -2612,26 +2768,21 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq_range_high = [self.freq_high_min.value(), self.freq_high_max.value()]
         
         self.freq2_canvas.axes.clear()
-        self.freq2_canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.0, alpha=0.8, label='Data A')
-        
-        # Add Data B
-        if self.comparison_mode and self.processed_b is not None:
-            freq_axis_b = self.processed_b['freq_axis']
-            spectrum_b = self.processed_b['spectrum']
-            self.freq2_canvas.axes.plot(freq_axis_b, np.abs(spectrum_b), 'r-', linewidth=1.0, alpha=0.6, label='Data B')
-            self.freq2_canvas.axes.legend(fontsize=9)
+        self.freq2_canvas.axes.plot(freq_axis, plot_data, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
         
         self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
         idx_visible = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
         if np.any(idx_visible):
-            y_visible = np.abs(spectrum)[idx_visible]
+            y_visible = plot_data[idx_visible]
             y_max = np.max(y_visible)
-            self.freq2_canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
+            y_min = np.min(y_visible)
+            range_y = y_max - y_min
+            if range_y == 0: range_y = 1.0
+            self.freq2_canvas.axes.set_ylim(y_min - 0.05 * range_y, y_max + 0.05 * range_y)
+            
         self.freq2_canvas.axes.set_xlabel('Frequency (Hz)', fontsize=10, fontweight='bold')
-        self.freq2_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
-        title = f'High Freq Comparison (View: {freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)' if self.comparison_mode \
-                else f'High Frequency Spectrum (View: {freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)'
-        self.freq2_canvas.axes.set_title(title, fontsize=11, fontweight='bold')
+        self.freq2_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
+        self.freq2_canvas.axes.set_title(f'High Frequency Spectrum ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=11, fontweight='bold')
         self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.freq2_canvas.fig.tight_layout()
         self.freq2_canvas.draw()
@@ -2822,11 +2973,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         
         # Set y-axis limits based on both datasets in visible range
-        idx_visible_a = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
+        idx_visible = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
         idx_visible_b = (freq_axis_b >= freq_range_low[0]) & (freq_axis_b <= freq_range_low[1])
         y_max_list = []
-        if np.any(idx_visible_a):
-            y_max_list.append(np.max(y_spec_a_low[idx_visible_a]))
+        if np.any(idx_visible):
+            y_max_list.append(np.max(y_spec_a_low[idx_visible]))
         if np.any(idx_visible_b):
             y_max_list.append(np.max(y_spec_b_low[idx_visible_b]))
         if y_max_list:
@@ -2886,687 +3037,163 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq2_canvas.fig.tight_layout()
         self.freq2_canvas.draw()
     
+    # --- NEW Methods for Phase and Recon ---
+    
+    def on_phase_changed(self):
+        """Handle phase slider changes (Fast Update)"""
+        # Update params
+        self.params['phase0'] = self.phase0_slider.value()
+        self.params['phase1'] = self.phase1_slider.value() / 10.0 # Scale down
+        
+        # Sync spinboxes
+        self.phase0_spin.blockSignals(True)
+        self.phase0_spin.setValue(self.params['phase0'])
+        self.phase0_spin.blockSignals(False)
+        
+        self.phase1_spin.blockSignals(True)
+        self.phase1_spin.setValue(self.params['phase1'])
+        self.phase1_spin.blockSignals(False)
+        
+        # Fast update
+        self.update_phase_only()
+        
+    def on_phase_spin_changed(self):
+        """Handle phase spinbox changes"""
+        self.params['phase0'] = self.phase0_spin.value()
+        self.params['phase1'] = self.phase1_spin.value()
+        
+        # Sync sliders
+        self.phase0_slider.blockSignals(True)
+        self.phase0_slider.setValue(int(self.params['phase0']))
+        self.phase0_slider.blockSignals(False)
+        
+        self.phase1_slider.blockSignals(True)
+        self.phase1_slider.setValue(int(self.params['phase1'] * 10))
+        self.phase1_slider.blockSignals(False)
+        
+        self.update_phase_only()
+        
+    def update_phase_only(self):
+        """Apply phase correction to cached spectrum without re-processing"""
+        if self.processed is None or 'spectrum_complex' not in self.processed:
+            return
+            
+        # Get cached unphased spectrum
+        spec = self.processed['spectrum_complex']
+        
+        # Apply phase
+        phi0 = self.params['phase0']
+        phi1 = self.params['phase1']
+        
+        phased_spec = apply_phase_correction(spec, phi0, phi1)
+        
+        # Update processed result
+        self.processed['spectrum'] = phased_spec
+        
+        # Re-plot
+        self.plot_results()
+        
+    def run_auto_phase(self):
+        """Run auto-phasing algorithm"""
+        if self.processed is None or 'spectrum_complex' not in self.processed:
+            return
+            
+        self.progress_label.setText("Auto-phasing...")
+        QApplication.processEvents()
+        
+        spec = self.processed['spectrum_complex']
+        p0, p1 = auto_phase(spec)
+        
+        # Update UI
+        self.phase0_spin.setValue(p0)
+        self.phase1_spin.setValue(p1)
+        
+        self.progress_label.setText("Auto-phase complete")
+        
+    def update_plot_view(self):
+        """Update plot view mode (Real/Imag/Mag)"""
+        self.plot_results()
+        
+    # --- End NEW Methods ---
+    
     def calculate_metrics(self):
         """Calculate and display metrics"""
         if self.processed is None:
             return
-        
-        from PySide6.QtWidgets import QTableWidgetItem
-        from PySide6.QtCore import Qt
-        
-        # Configure table based on comparison mode
-        if self.comparison_mode and self.processed_b is not None:
-            # Show all 3 columns for comparison
-            self.metrics_table.setColumnHidden(2, False)
-            self.metrics_table.setHorizontalHeaderLabels(["Metric", "Data A", "Data B"])
-        else:
-            # Hide Data B column for single mode
-            self.metrics_table.setColumnHidden(2, True)
-            self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value", ""])
-        
+            
         freq_axis = self.processed['freq_axis']
         spectrum = self.processed['spectrum']
+        # Use magnitude for SNR calculation usually
         spectrum_abs = np.abs(spectrum)
         
-        results = []
-        results.append("=== Processing Pipeline ===")
-        results.append(f"[OK] Savgol Filter: window={self.params['conv_points']}, poly={self.params['poly_order']}")
-        results.append(f"[OK] Truncation: start={self.params['trunc_start']}, end={self.params['trunc_end']}")
-        results.append(f"[OK] Apodization T2*: {self.params['apod_t2star']:.2f}")
-        results.append(f"[OK] Hanning: {'Yes' if self.params['use_hanning'] else 'No'}")
-        results.append(f"[OK] Zero Fill Factor: {self.params['zf_factor']:.2f}")
+        # Get SNR ranges from UI
+        sig_min = self.signal_range_min.value()
+        sig_max = self.signal_range_max.value()
+        noise_min = self.noise_range_min.value()
+        noise_max = self.noise_range_max.value()
         
-        # SNR calculation
-        if HAS_NMRDUINO:
-            try:
-                # Use user-defined ranges from UI
-                frequency_range_snr = [self.signal_range_min.value(), self.signal_range_max.value()]
-                noise_range_snr = [self.noise_range_min.value(), self.noise_range_max.value()]
+        # Calculate SNR for Data A
+        snr_a = 0
+        noise_a = 0
+        sig_idx = None
+        try:
+            # Signal peak
+            sig_idx = (freq_axis >= sig_min) & (freq_axis <= sig_max)
+            if np.any(sig_idx):
+                sig_peak = np.max(spectrum_abs[sig_idx])
+            else:
+                sig_peak = 0
                 
-                # Calculate peak height from signal region
-                signal_idx = (freq_axis >= frequency_range_snr[0]) & (freq_axis <= frequency_range_snr[1])
-                if np.any(signal_idx):
-                    peak_height = np.max(spectrum_abs[signal_idx])
-                else:
-                    peak_height = np.max(spectrum_abs)  # Fallback to global max
+            # Noise std
+            noise_idx = (freq_axis >= noise_min) & (freq_axis <= noise_max)
+            if np.any(noise_idx):
+                noise_a = np.std(spectrum_abs[noise_idx])
+            else:
+                noise_a = 1.0 # Avoid div by zero
                 
-                snr = nmr_util.snr_calc(freq_axis, spectrum_abs, 
-                                       frequency_range_snr, noise_range_snr)
-                
-                # Calculate noise level
-                noise_idx = (freq_axis >= noise_range_snr[0]) & (freq_axis <= noise_range_snr[1])
-                noise_level = np.std(spectrum_abs[noise_idx])
-                
-                results.append("\n═══ Quality Metrics ═══")
-                
-                # Calculate per-scan SNR
-                if self.scan_count > 1:
-                    snr_per_scan = snr / np.sqrt(self.scan_count)
-                else:
-                    snr_per_scan = snr
-                
-                # Update table for single mode
-                self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
-                self.metrics_table.setItem(0, 1, QTableWidgetItem(f"{snr:.2f}"))
-                
-                self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
-                self.metrics_table.setItem(1, 1, QTableWidgetItem(f"{snr_per_scan:.2f}"))
-                
-                self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
-                self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
-                
-                self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
-                self.metrics_table.setItem(3, 1, QTableWidgetItem(f"{noise_level:.2f}"))
-                
-                self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
-                self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
-                
-                # Make all cells read-only and aligned
-                for row in range(5):
-                    for col in range(2):
-                        item = self.metrics_table.item(row, col)
-                        if item:
-                            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                            if col == 0:
-                                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                            else:
-                                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                
-                results.append(f"SNR (total, {self.scan_count} scans): {snr:.2f}")
-                results.append(f"SNR (estimated per scan): {snr_per_scan:.2f}")
-                results.append(f"Peak Height: {peak_height:.2f}")
-                results.append(f"Noise Level: {noise_level:.2f}")
-                results.append(f"Signal Range: {frequency_range_snr}")
-                results.append(f"Noise Range: {noise_range_snr}")
-                
-            except Exception as e:
-                # Still show peak height
-                peak_height = np.max(spectrum_abs)
-                
-                self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
-                self.metrics_table.setItem(0, 1, QTableWidgetItem("Error"))
-                self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
-                self.metrics_table.setItem(1, 1, QTableWidgetItem("--"))
-                self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
-                self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
-                self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
-                self.metrics_table.setItem(3, 1, QTableWidgetItem("--"))
-                self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
-                self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
-                
-                results.append(f"\n[ERROR] SNR calculation failed: {e}")
+            if noise_a > 0:
+                snr_a = sig_peak / noise_a
+        except Exception:
+            pass
+            
+        # Update Table
+        self.metrics_table.item(0, 0).setText("SNR (Total)")
+        self.metrics_table.item(0, 1).setText(f"{snr_a:.2f}")
+        
+        if self.scan_count > 0:
+            snr_norm_a = snr_a / np.sqrt(self.scan_count)
+            self.metrics_table.item(1, 0).setText("SNR / sqrt(N)")
+            self.metrics_table.item(1, 1).setText(f"{snr_norm_a:.2f}")
         else:
-            # Show global peak height as fallback
-            peak_height = np.max(spectrum_abs)
+            self.metrics_table.item(1, 0).setText("SNR / sqrt(N)")
+            self.metrics_table.item(1, 1).setText("--")
             
-            self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
-            self.metrics_table.setItem(0, 1, QTableWidgetItem("N/A"))
-            self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
-            self.metrics_table.setItem(1, 1, QTableWidgetItem("--"))
-            self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
-            self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
-            self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
-            self.metrics_table.setItem(3, 1, QTableWidgetItem("--"))
-            self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
-            self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
-            
-            results.append("\n[WARNING] nmrduino_util not available for SNR calculation")
+        self.metrics_table.item(2, 0).setText("Noise Level")
+        self.metrics_table.item(2, 1).setText(f"{noise_a:.2f}")
         
-        # Calculate metrics for Data B if in comparison mode
-        if self.comparison_mode and self.processed_b is not None:
-            freq_axis_b = self.processed_b['freq_axis']
-            spectrum_b = self.processed_b['spectrum']
-            spectrum_abs_b = np.abs(spectrum_b)
-            
-            if HAS_NMRDUINO:
-                try:
-                    # Calculate peak height from signal region
-                    signal_idx_b = (freq_axis_b >= frequency_range_snr[0]) & (freq_axis_b <= frequency_range_snr[1])
-                    if np.any(signal_idx_b):
-                        peak_height_b = np.max(spectrum_abs_b[signal_idx_b])
-                    else:
-                        peak_height_b = np.max(spectrum_abs_b)
-                    
-                    snr_b = nmr_util.snr_calc(freq_axis_b, spectrum_abs_b, 
-                                           frequency_range_snr, noise_range_snr)
-                    
-                    noise_idx_b = (freq_axis_b >= noise_range_snr[0]) & (freq_axis_b <= noise_range_snr[1])
-                    noise_level_b = np.std(spectrum_abs_b[noise_idx_b])
-                    
-                    # Calculate per-scan SNR
-                    if self.scan_count_b > 1:
-                        snr_per_scan_b = snr_b / np.sqrt(self.scan_count_b)
-                    else:
-                        snr_per_scan_b = snr_b
-                    
-                    # Get Data A per-scan SNR
-                    if self.scan_count > 1:
-                        snr_per_scan_a = snr / np.sqrt(self.scan_count)
-                    else:
-                        snr_per_scan_a = snr
-                    
-                    # Update table
-                    from PySide6.QtWidgets import QTableWidgetItem
-                    from PySide6.QtCore import Qt
-                    
-                    # Row 0: SNR (Total)
-                    self.metrics_table.setItem(0, 0, QTableWidgetItem("SNR (Total)"))
-                    self.metrics_table.setItem(0, 1, QTableWidgetItem(f"{snr:.2f}"))
-                    self.metrics_table.setItem(0, 2, QTableWidgetItem(f"{snr_b:.2f}"))
-                    
-                    # Row 1: SNR (Per Scan)
-                    self.metrics_table.setItem(1, 0, QTableWidgetItem("SNR (Per Scan)"))
-                    self.metrics_table.setItem(1, 1, QTableWidgetItem(f"{snr_per_scan_a:.2f}"))
-                    self.metrics_table.setItem(1, 2, QTableWidgetItem(f"{snr_per_scan_b:.2f}"))
-                    
-                    # Row 2: Peak
-                    self.metrics_table.setItem(2, 0, QTableWidgetItem("Peak"))
-                    self.metrics_table.setItem(2, 1, QTableWidgetItem(f"{peak_height:.1f}"))
-                    self.metrics_table.setItem(2, 2, QTableWidgetItem(f"{peak_height_b:.1f}"))
-                    
-                    # Row 3: Noise
-                    self.metrics_table.setItem(3, 0, QTableWidgetItem("Noise"))
-                    self.metrics_table.setItem(3, 1, QTableWidgetItem(f"{noise_level:.2f}"))
-                    self.metrics_table.setItem(3, 2, QTableWidgetItem(f"{noise_level_b:.2f}"))
-                    
-                    # Row 4: Scans
-                    self.metrics_table.setItem(4, 0, QTableWidgetItem("Scans"))
-                    self.metrics_table.setItem(4, 1, QTableWidgetItem(f"{self.scan_count}"))
-                    self.metrics_table.setItem(4, 2, QTableWidgetItem(f"{self.scan_count_b}"))
-                    
-                    # Make all cells read-only and center-aligned
-                    for row in range(5):
-                        for col in range(3):
-                            item = self.metrics_table.item(row, col)
-                            if item:
-                                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                                if col == 0:  # Metric column - left align
-                                    item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                                else:  # Data columns - right align
-                                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                    
-                    # Create comparison table
-                    results.append("\n\n╔═══════════════════════════════════════════════════════╗")
-                    results.append("║         COMPARISON TABLE (Data A vs Data B)          ║")
-                    results.append("╠═══════════════════════════════════════════════════════╣")
-                    results.append("║ Metric              │   Data A    │   Data B    │ Δ   ║")
-                    results.append("╟─────────────────────┼─────────────┼─────────────┼─────╢")
-                    
-                    # Get Data A per-scan SNR
-                    if self.scan_count > 1:
-                        snr_per_scan_a = snr / np.sqrt(self.scan_count)
-                    else:
-                        snr_per_scan_a = snr
-                    
-                    # SNR Total
-                    snr_diff = snr - snr_b
-                    results.append(f"║ SNR (Total)         │ {snr:>10.2f}  │ {snr_b:>10.2f}  │ {snr_diff:>+4.1f}║")
-                    
-                    # SNR Per Scan
-                    snr_ps_diff = snr_per_scan_a - snr_per_scan_b
-                    results.append(f"║ SNR (Per Scan)      │ {snr_per_scan_a:>10.2f}  │ {snr_per_scan_b:>10.2f}  │ {snr_ps_diff:>+4.2f}║")
-                    
-                    # Peak Height
-                    peak_diff = peak_height - peak_height_b
-                    results.append(f"║ Peak Height         │ {peak_height:>10.1f}  │ {peak_height_b:>10.1f}  │ {peak_diff:>+4.0f}║")
-                    
-                    # Noise Level
-                    noise_diff = noise_level - noise_level_b
-                    results.append(f"║ Noise Level         │ {noise_level:>10.2f}  │ {noise_level_b:>10.2f}  │ {noise_diff:>+4.2f}║")
-                    
-                    # Scans
-                    scan_diff = self.scan_count - self.scan_count_b
-                    results.append(f"║ Scans               │ {self.scan_count:>10d}  │ {self.scan_count_b:>10d}  │ {scan_diff:>+4d}║")
-                    
-                    results.append("╚═══════════════════════════════════════════════════════╝")
-                    
-                    # Additional comparison metrics
-                    snr_ratio = snr / snr_b if snr_b > 0 else float('inf')
-                    results.append(f"\nSNR Ratio (A/B): {snr_ratio:.3f}x")
-                    results.append(f"SNR Improvement: {((snr/snr_b - 1) * 100):+.1f}%" if snr_b > 0 else "N/A")
-                    
-                except Exception as e:
-                    results.append(f"\n[ERROR] Data B metrics calculation failed: {e}")
+        self.metrics_table.item(3, 0).setText("Linewidth (Hz)")
+        self.metrics_table.item(3, 1).setText("--") 
+        
+        self.metrics_table.item(4, 0).setText("Peak Freq (Hz)")
+        # Find peak freq
+        if sig_idx is not None and np.any(sig_idx):
+            subset_freq = freq_axis[sig_idx]
+            subset_spec = spectrum_abs[sig_idx]
+            peak_idx = np.argmax(subset_spec)
+            peak_freq = subset_freq[peak_idx]
+            self.metrics_table.item(4, 1).setText(f"{peak_freq:.2f}")
+        else:
+            self.metrics_table.item(4, 1).setText("--")
+
+        # Update Results Text
+        results = []
+        results.append("Processing Applied:")
+        results.append(f"  Savgol: {self.params['conv_points']}, {self.params['poly_order']}")
+        results.append(f"  Phase: {self.params['phase0']:.1f}, {self.params['phase1']:.1f}")
+        if self.params['enable_recon']:
+            results.append(f"  Recon: {self.params['recon_points']} pts")
         
         self.results_text.setText('\n'.join(results))
-    
-    @Slot()
-    def save_parameters(self):
-        """Save current parameters to JSON"""
-        if self.current_path is None:
-            filepath, _ = QFileDialog.getSaveFileName(
-                self, "Save Parameters",
-                "", "JSON files (*.json)"
-            )
-            if not filepath:
-                return
-        else:
-            filepath = os.path.join(self.current_path, "processing_params.json")
-        
-        try:
-            with open(filepath, 'w') as f:
-                json.dump(self.params, f, indent=2)
-            
-            QMessageBox.information(self, "Saved", f"Parameters saved to:\n{filepath}")
-        except Exception as e:
-            QMessageBox.critical(self, "Save Error", f"Failed to save parameters:\n{e}")
-    
-    @Slot()
-    def load_parameters(self, filepath=None):
-        """Load parameters from JSON"""
-        if filepath is None:
-            filepath, _ = QFileDialog.getOpenFileName(
-                self, "Load Parameters", 
-                self.current_path if self.current_path else "",
-                "JSON files (*.json)"
-            )
-        
-        if not filepath:
-            return
-        
-        try:
-            with open(filepath, 'r') as f:
-                params = json.load(f)
-            
-            # Update UI sliders
-            self.conv_slider.setValue(int(params.get('conv_points', 300)))
-            self.poly_slider.setValue(int(params.get('poly_order', 2)))
-            self.trunc_start_slider.setValue(int(params.get('trunc_start', 10)))
-            self.trunc_end_slider.setValue(int(params.get('trunc_end', 10)))
-            self.apod_slider.setValue(int(float(params.get('apod_t2star', 0.0)) * 100))
-            self.use_hanning.setChecked(bool(params.get('use_hanning', 0)))
-            self.zf_slider.setValue(int(float(params.get('zf_factor', 0.0)) * 100))
-            
-            # Update frequency display range sliders if present
-            if 'freq_low_min' in params:
-                self.freq_low_min.setValue(float(params['freq_low_min']))
-            if 'freq_low_max' in params:
-                self.freq_low_max.setValue(float(params['freq_low_max']))
-            if 'freq_high_min' in params:
-                self.freq_high_min.setValue(float(params['freq_high_min']))
-            if 'freq_high_max' in params:
-                self.freq_high_max.setValue(float(params['freq_high_max']))
-            
-            self.params = params
-            
-            QMessageBox.information(self, "Loaded", f"Parameters loaded from:\n{filepath}")
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Load Error", f"Failed to load parameters:\n{e}")
-    
-    @Slot()
-    def export_results(self):
-        """Export processing results"""
-        if self.processed is None:
-            return
-        
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Results",
-            "nmr_processed.npz",
-            "NumPy archive (*.npz);;All files (*.*)"
-        )
-        
-        if filename:
-            try:
-                np.savez(
-                    filename,
-                    time_data=self.processed['time_data'],
-                    freq_axis=self.processed['freq_axis'],
-                    spectrum=self.processed['spectrum'],
-                    sampling_rate=self.sampling_rate,
-                    acquisition_time=self.acq_time,
-                    parameters=self.params
-                )
-                
-                QMessageBox.information(self, "Export Successful", f"Results exported to:\n{filename}")
-            
-            except Exception as e:
-                QMessageBox.critical(self, "Export Failed", f"Cannot export:\n{e}")
-    
-    def export_figures_svg(self):
-        """Export all figures as SVG files"""
-        if self.processed is None:
-            QMessageBox.warning(self, "No Data", "Please process data first before exporting figures.")
-            return
-        
-        # Ask user to select directory
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Directory for SVG Export",
-            "",
-            QFileDialog.Option.ShowDirsOnly
-        )
-        
-        if not directory:
-            return
-        
-        try:
-            import os
-            
-            # Export time domain plot
-            time_path = os.path.join(directory, "time_domain.svg")
-            self.time_canvas.fig.savefig(time_path, format='svg', bbox_inches='tight', dpi=300)
-            
-            # Export low frequency plot
-            freq1_path = os.path.join(directory, "freq_low.svg")
-            self.freq1_canvas.fig.savefig(freq1_path, format='svg', bbox_inches='tight', dpi=300)
-            
-            # Export high frequency plot
-            freq2_path = os.path.join(directory, "freq_high.svg")
-            self.freq2_canvas.fig.savefig(freq2_path, format='svg', bbox_inches='tight', dpi=300)
-            
-            QMessageBox.information(
-                self, 
-                "Export Successful", 
-                f"Figures exported to:\n{directory}\n\nFiles:\n- time_domain.svg\n- freq_low.svg\n- freq_high.svg"
-            )
-        
-        except Exception as e:
-            QMessageBox.critical(self, "Export Failed", f"Cannot export figures:\n{e}")
-    
-    def maximize_plot(self, plot_type):
-        """Maximize a specific plot in a new window"""
-        dialog = QWidget()
-        dialog.setWindowTitle(f"Maximized View - {plot_type.upper()}")
-        dialog.setGeometry(100, 100, 1200, 800)
-        dialog.setStyleSheet("background-color: white;")
-        
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Create a new canvas with larger size
-        canvas = MplCanvas(dialog, width=12, height=8, dpi=100)
-        toolbar = NavigationToolbar(canvas, dialog)
-        
-        layout.addWidget(toolbar)
-        layout.addWidget(canvas)
-        
-        # Copy the plot
-        if plot_type == 'time' and self.processed is not None:
-            time_data = self.processed['time_data']
-            acq_time = self.processed['acq_time_effective']
-            time_axis = np.linspace(0, acq_time, len(time_data))
-            
-            canvas.axes.clear()
-            canvas.axes.plot(time_axis, np.real(time_data), 'k-', linewidth=0.8, alpha=0.8)
-            canvas.axes.set_xlabel('Time (s)', fontsize=12, fontweight='bold')
-            canvas.axes.set_ylabel('Amplitude', fontsize=12, fontweight='bold')
-            canvas.axes.set_title('Time Domain Signal (Maximized View)', fontsize=14, fontweight='bold')
-            canvas.axes.grid(True, alpha=0.3, linestyle='--')
-            canvas.axes.autoscale(enable=True, axis='y', tight=False)  # Auto-scale Y axis
-            canvas.fig.tight_layout()
-            canvas.draw()
-            
-        elif plot_type == 'freq1' and self.processed is not None:
-            freq_axis = self.processed['freq_axis']
-            spectrum = self.processed['spectrum']
-            freq_range = [self.freq_low_min.value(), self.freq_low_max.value()]
-            
-            canvas.axes.clear()
-            canvas.axes.plot(freq_axis, np.abs(spectrum), 'b-', linewidth=1.2)
-            canvas.axes.set_xlim(freq_range[0], freq_range[1])  # Set initial view range
-            # Auto-scale Y based on visible data in the X range
-            idx_visible = (freq_axis >= freq_range[0]) & (freq_axis <= freq_range[1])
-            if np.any(idx_visible):
-                y_visible = np.abs(spectrum)[idx_visible]
-                y_max = np.max(y_visible)
-                canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
-            canvas.axes.set_xlabel('Frequency (Hz)', fontsize=12, fontweight='bold')
-            canvas.axes.set_ylabel('Amplitude', fontsize=12, fontweight='bold')
-            canvas.axes.set_title(f'Low Frequency Spectrum (Initial View: {freq_range[0]:.0f}-{freq_range[1]:.0f} Hz)', 
-                                 fontsize=14, fontweight='bold')
-            canvas.axes.grid(True, alpha=0.3, linestyle='--')
-            canvas.fig.tight_layout()
-            canvas.draw()
-            
-        elif plot_type == 'freq2' and self.processed is not None:
-            freq_axis = self.processed['freq_axis']
-            spectrum = self.processed['spectrum']
-            freq_range = [self.freq_high_min.value(), self.freq_high_max.value()]
-            
-            canvas.axes.clear()
-            canvas.axes.plot(freq_axis, np.abs(spectrum), 'r-', linewidth=1.2)
-            canvas.axes.set_xlim(freq_range[0], freq_range[1])  # Set initial view range
-            # Auto-scale Y based on visible data in the X range
-            idx_visible = (freq_axis >= freq_range[0]) & (freq_axis <= freq_range[1])
-            if np.any(idx_visible):
-                y_visible = np.abs(spectrum)[idx_visible]
-                y_max = np.max(y_visible)
-                canvas.axes.set_ylim(-0.05 * y_max, 1.1 * y_max)
-            canvas.axes.set_xlabel('Frequency (Hz)', fontsize=12, fontweight='bold')
-            canvas.axes.set_ylabel('Amplitude', fontsize=12, fontweight='bold')
-            canvas.axes.set_title(f'High Frequency Spectrum (Initial View: {freq_range[0]:.0f}-{freq_range[1]:.0f} Hz)', 
-                                 fontsize=14, fontweight='bold')
-            canvas.axes.grid(True, alpha=0.3, linestyle='--')
-            canvas.fig.tight_layout()
-            canvas.draw()
-        
-        # Close button
-        close_btn = QPushButton("Close")
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #757575;
-                color: white;
-                padding: 10px;
-                font-weight: bold;
-                font-size: 11px;
-                border: none;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #616161;
-            }
-        """)
-        close_btn.clicked.connect(dialog.close)
-        layout.addWidget(close_btn)
-        
-        dialog.show()
-        # Keep reference to prevent garbage collection
-        if not hasattr(self, '_maximized_windows'):
-            self._maximized_windows = []
-        self._maximized_windows.append(dialog)
-    
-    def closeEvent(self, event):
-        """Handle window close event"""
-        # Stop auto-process timer
-        if hasattr(self, 'process_timer') and self.process_timer.isActive():
-            self.process_timer.stop()
-
-        # Stop processing worker if running
-        if self.worker is not None and self.worker.isRunning():
-            self.worker.stop()
-            # Wait up to 3 seconds for graceful shutdown
-            if not self.worker.wait(3000):
-                # Force terminate if still running
-                self.worker.terminate()
-                # Wait a bit more for termination
-                self.worker.wait(1000)
-        
-        # Cleanup worker
-        if self.worker is not None:
-            self.worker.deleteLater()
-            self.worker = None
-        
-        # Close all maximized windows
-        if hasattr(self, '_maximized_windows'):
-            for window in self._maximized_windows:
-                window.close()
-        
-        # Save window state
-        self.save_window_state()
-        
-        event.accept()
-    
-    def toggle_comparison_mode(self, checked):
-        """Toggle between single and comparison mode"""
-        self.comparison_mode = checked
-        
-        if checked:
-            self.comparison_mode_action.setText('Disable Comparison Mode')
-            # Show comparison UI elements
-            if hasattr(self, 'data_b_group'):
-                self.data_b_group.setVisible(True)
-            if hasattr(self, 'comparison_controls_group'):
-                self.comparison_controls_group.setVisible(True)
-            QMessageBox.information(self, "Comparison Mode", 
-                                   "Comparison mode enabled!\n\n"
-                                   "You can now:\n"
-                                   "1. Load a second dataset (Data B)\n"
-                                   "2. Choose to use same or independent parameters\n"
-                                   "3. View side-by-side or overlaid comparison")
-        else:
-            self.comparison_mode_action.setText('Enable Comparison Mode')
-            # Hide comparison UI elements
-            if hasattr(self, 'data_b_group'):
-                self.data_b_group.setVisible(False)
-            if hasattr(self, 'comparison_controls_group'):
-                self.comparison_controls_group.setVisible(False)
-    
-    def save_window_state(self):
-        """Save window geometry and splitter states"""
-        self.settings.setValue('geometry', self.saveGeometry())
-        self.settings.setValue('main_splitter', self.main_splitter.saveState())
-        self.settings.setValue('plot_splitter', self.plot_splitter.saveState())
-    
-    def restore_window_state(self):
-        """Restore window geometry and splitter states"""
-        geometry = self.settings.value('geometry')
-        if geometry:
-            self.restoreGeometry(geometry)
-        
-        main_splitter_state = self.settings.value('main_splitter')
-        if main_splitter_state:
-            self.main_splitter.restoreState(main_splitter_state)
-        
-        plot_splitter_state = self.settings.value('plot_splitter')
-        if plot_splitter_state:
-            self.plot_splitter.restoreState(plot_splitter_state)
-    
-    def load_folder_b(self):
-        """Load Data B for comparison"""
-        folder = QFileDialog.getExistingDirectory(self, "Select Data B Folder")
-        if not folder:
-            return
-        
-        try:
-            self.current_path_b = folder
-            
-            if HAS_NMRDUINO:
-                # Try to load compiled data
-                compiled_path = os.path.join(folder, "halp_compiled.npy")
-                if os.path.exists(compiled_path):
-                    self.halp_b = np.load(compiled_path)
-                    self.sampling_rate_b = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
-                    self.acq_time_b = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                    self.scan_count_b = nmr_util.scan_number_extraction(folder)
-                else:
-                    # Load and compile
-                    compiled = nmr_util.nmrduino_dat_interp(folder, 0)
-                    self.halp_b = compiled[0]
-                    self.sampling_rate_b = compiled[1]
-                    self.acq_time_b = compiled[2]
-                    self.scan_count_b = nmr_util.scan_number_extraction(folder)
-                    
-                    # Save compiled
-                    np.save(compiled_path, self.halp_b)
-                    np.save(os.path.join(folder, "sampling_rate_compiled.npy"), self.sampling_rate_b)
-                    np.save(os.path.join(folder, "acq_time_compiled.npy"), self.acq_time_b)
-                    np.save(os.path.join(folder, "scan_count.npy"), self.scan_count_b)
-            else:
-                # Manual loading
-                compiled_path = os.path.join(folder, "halp_compiled.npy")
-                if os.path.exists(compiled_path):
-                    self.halp_b = np.load(compiled_path)
-                    self.sampling_rate_b = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
-                    self.acq_time_b = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                    
-                    # Load scan count if available
-                    scan_count_path = os.path.join(folder, "scan_count.npy")
-                    if os.path.exists(scan_count_path):
-                        self.scan_count_b = int(np.load(scan_count_path))
-                    else:
-                        dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
-                        self.scan_count_b = len(dat_files) if dat_files else 1
-                else:
-                    raise FileNotFoundError("No compiled data found. Please compile first or install nmrduino_util.")
-            
-            self.data_b_info.setText(
-                f"<b>Loaded:</b> {os.path.basename(folder)}<br>"
-                f"<b>Points:</b> {len(self.halp_b)}<br>"
-                f"<b>Sampling:</b> {self.sampling_rate_b:.1f} Hz<br>"
-                f"<b>Acq Time:</b> {self.acq_time_b:.3f} s<br>"
-                f"<b>Scans:</b> {self.scan_count_b}"
-            )
-            
-            QMessageBox.information(self, "Data B Loaded", 
-                                   f"Data B loaded successfully!\n\n"
-                                   f"Folder: {os.path.basename(folder)}\n"
-                                   f"Points: {len(self.halp_b)}\n"
-                                   f"Scans: {self.scan_count_b}")
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
-    
-    def on_display_mode_changed(self, checked):
-        """Handle display mode change"""
-        if checked:
-            self.plot_results()
-
-    def on_same_params_changed(self, state):
-        """Handle same parameters checkbox change"""
-        self.use_same_params = (state == Qt.Checked)
-        if self.use_same_params:
-            # Copy params A to params B
-            self.params_b = self.params.copy()
-            # Hide Data B parameters group
-            self.data_b_params_group.setVisible(False)
-            # Trigger reprocessing to apply A's params to B
-            if self.comparison_mode and self.halp_b is not None:
-                self.process_data()
-        else:
-            # Show Data B parameters group
-            self.data_b_params_group.setVisible(True)
-            # Initialize Data B parameters from current settings if not already set
-            if self.params_b == self.params:
-                self.update_params_b_ui()
-    
-    def update_params_b_ui(self):
-        """Update Data B parameter UI from params_b"""
-        self.conv_spinbox_b.setValue(self.params_b.get('conv_points', 300))
-        self.poly_spinbox_b.setValue(self.params_b.get('poly_order', 2))
-        self.trunc_spinbox_b.setValue(self.params_b.get('trunc_start', 1600))
-        self.t2_spinbox_b.setValue(self.params_b.get('apod_t2star', 0.029))
-        # Map use_hanning (0/1) to spinbox (0.0/1.0)
-        self.hanning_spinbox_b.setValue(1.0 if self.params_b.get('use_hanning', 0) == 1 else 0.0)
-        # Map zf_factor to spinbox (0 or 10000)
-        self.zerofill_spinbox_b.setValue(10000 if self.params_b.get('zf_factor', 0.0) > 0 else 0)
-    
-    def apply_data_b_params(self):
-        """Apply Data B parameters from UI to params_b and process"""
-        self.params_b['conv_points'] = self.conv_spinbox_b.value()
-        self.params_b['poly_order'] = self.poly_spinbox_b.value()
-        self.params_b['trunc_start'] = self.trunc_spinbox_b.value()
-        self.params_b['trunc_end'] = 10
-        self.params_b['apod_t2star'] = self.t2_spinbox_b.value()
-        self.params_b['use_hanning'] = 1 if self.hanning_spinbox_b.value() > 0.1 else 0
-        self.params_b['zf_factor'] = 1.0 if self.zerofill_spinbox_b.value() > 0 else 0.0
-        
-        # Trigger processing immediately
-        self.process_data()
-    
-    def apply_comparison(self):
-        """Apply comparison and update plots"""
-        if self.halp is None:
-            QMessageBox.warning(self, "No Data", "Please load Data A first!")
-            return
-        
-        if self.halp_b is None:
-            QMessageBox.warning(self, "No Data B", "Please load Data B for comparison!")
-            return
-        
-        # Process both datasets
-        self.process_data()
 
 
 def main():
