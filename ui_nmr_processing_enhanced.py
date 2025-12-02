@@ -2500,6 +2500,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     if 'freq_high_max' in params:
                         self.freq_high_max.setValue(float(params['freq_high_max']))
                     
+                    # Update ZULF params
+                    if 'phase0' in params:
+                        self.phase0_spin.setValue(float(params['phase0']))
+                    if 'phase1' in params:
+                        self.phase1_spin.setValue(float(params['phase1']))
+                    if 'enable_recon' in params:
+                        self.enable_recon.setChecked(bool(params['enable_recon']))
+                    if 'recon_points' in params:
+                        self.recon_points.setValue(int(params['recon_points']))
+                    
                     self.params = params
                     param_loaded = True
                 except Exception as e:
@@ -3115,6 +3125,210 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.plot_results()
         
     # --- End NEW Methods ---
+
+    def load_parameters(self):
+        """Load parameters from JSON file"""
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Load Parameters", "", "JSON Files (*.json);;All Files (*)"
+        )
+        if not file_name:
+            return
+            
+        try:
+            with open(file_name, 'r') as f:
+                params = json.load(f)
+            
+            # Update UI sliders
+            self.conv_slider.setValue(int(params.get('conv_points', 300)))
+            self.poly_slider.setValue(int(params.get('poly_order', 2)))
+            self.trunc_start_slider.setValue(int(params.get('trunc_start', 10)))
+            self.trunc_end_slider.setValue(int(params.get('trunc_end', 10)))
+            self.apod_slider.setValue(int(float(params.get('apod_t2star', 0.0)) * 100))
+            self.use_hanning.setChecked(bool(params.get('use_hanning', 0)))
+            self.zf_slider.setValue(int(float(params.get('zf_factor', 0.0)) * 100))
+            
+            # Update frequency display range sliders if present
+            if 'freq_low_min' in params:
+                self.freq_low_min.setValue(float(params['freq_low_min']))
+            if 'freq_low_max' in params:
+                self.freq_low_max.setValue(float(params['freq_low_max']))
+            if 'freq_high_min' in params:
+                self.freq_high_min.setValue(float(params['freq_high_min']))
+            if 'freq_high_max' in params:
+                self.freq_high_max.setValue(float(params['freq_high_max']))
+                
+            # Update ZULF params
+            if 'phase0' in params:
+                self.phase0_spin.setValue(float(params['phase0']))
+            if 'phase1' in params:
+                self.phase1_spin.setValue(float(params['phase1']))
+            if 'enable_recon' in params:
+                self.enable_recon.setChecked(bool(params['enable_recon']))
+            if 'recon_points' in params:
+                self.recon_points.setValue(int(params['recon_points']))
+            
+            self.params = params
+            QMessageBox.information(self, "Success", "Parameters loaded successfully.")
+            self.schedule_processing()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load parameters:\n{e}")
+
+    def save_parameters(self):
+        """Save current parameters to JSON file"""
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Save Parameters", "", "JSON Files (*.json);;All Files (*)"
+        )
+        if not file_name:
+            return
+            
+        try:
+            # Ensure params are up to date
+            current_params = {
+                'zf_factor': self.zf_slider.value() / 100.0,
+                'use_hanning': 1 if self.use_hanning.isChecked() else 0,
+                'conv_points': self.conv_slider.value(),
+                'poly_order': self.poly_slider.value(),
+                'trunc_start': self.trunc_start_slider.value(),
+                'trunc_end': self.trunc_end_slider.value(),
+                'apod_t2star': self.apod_slider.value() / 100.0,
+                'freq_low_min': self.freq_low_min.value(),
+                'freq_low_max': self.freq_low_max.value(),
+                'freq_high_min': self.freq_high_min.value(),
+                'freq_high_max': self.freq_high_max.value(),
+                'enable_recon': self.enable_recon.isChecked(),
+                'recon_points': self.recon_points.value(),
+                'phase0': self.phase0_spin.value(),
+                'phase1': self.phase1_spin.value()
+            }
+            
+            with open(file_name, 'w') as f:
+                json.dump(current_params, f, indent=4)
+                
+            QMessageBox.information(self, "Success", "Parameters saved successfully.")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save parameters:\n{e}")
+
+    def export_results(self):
+        """Export processed data to NPZ"""
+        if self.processed is None:
+            return
+            
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Export Results", "", "NumPy Files (*.npz);;All Files (*)"
+        )
+        if not file_name:
+            return
+            
+        try:
+            np.savez(
+                file_name,
+                time_data=self.processed['time_data'],
+                freq_axis=self.processed['freq_axis'],
+                spectrum=self.processed['spectrum'],
+                params=self.params
+            )
+            QMessageBox.information(self, "Success", "Results exported successfully.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export results:\n{e}")
+
+    def export_figures_svg(self):
+        """Export figures as SVG"""
+        folder = QFileDialog.getExistingDirectory(self, "Select Export Folder")
+        if not folder:
+            return
+            
+        try:
+            self.time_canvas.fig.savefig(os.path.join(folder, "time_domain.svg"))
+            self.freq1_canvas.fig.savefig(os.path.join(folder, "freq_low.svg"))
+            self.freq2_canvas.fig.savefig(os.path.join(folder, "freq_high.svg"))
+            QMessageBox.information(self, "Success", "Figures exported as SVG.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export figures:\n{e}")
+
+    def toggle_comparison_mode(self, checked):
+        """Toggle comparison mode UI elements"""
+        self.comparison_mode = checked
+        self.data_b_group.setVisible(checked)
+        self.comparison_controls_group.setVisible(checked)
+        
+        # If disabling, clear Data B plots
+        if not checked:
+            self.processed_b = None
+            self.plot_results()
+
+    def load_folder_b(self):
+        """Load Data B folder"""
+        folder = QFileDialog.getExistingDirectory(self, "Select Data B Folder")
+        if not folder:
+            return
+            
+        try:
+            self.current_path_b = folder
+            if HAS_NMRDUINO:
+                compiled = nmr_util.nmrduino_dat_interp(folder, 0)
+                self.halp_b = compiled[0]
+                self.sampling_rate_b = compiled[1]
+                self.acq_time_b = compiled[2]
+                self.scan_count_b = nmr_util.scan_number_extraction(folder)
+            else:
+                # Fallback manual load
+                compiled_path = os.path.join(folder, "halp_compiled.npy")
+                if os.path.exists(compiled_path):
+                    self.halp_b = np.load(compiled_path)
+                    self.sampling_rate_b = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
+                    self.acq_time_b = np.load(os.path.join(folder, "acq_time_compiled.npy"))
+                else:
+                    raise FileNotFoundError("No compiled data found for Data B")
+            
+            self.data_b_info.setText(f"Loaded: {os.path.basename(folder)}")
+            
+            # Process if we have params
+            if self.use_same_params:
+                self.process_data()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
+
+    def on_same_params_changed(self, state):
+        """Handle same params checkbox change"""
+        self.use_same_params = (state == Qt.Checked)
+        self.data_b_params_group.setVisible(not self.use_same_params)
+        
+    def apply_data_b_params(self):
+        """Apply independent parameters for Data B"""
+        if not self.use_same_params:
+            self.process_data()
+            
+    def apply_comparison(self):
+        """Apply comparison settings (re-plot)"""
+        self.plot_results()
+        
+    def on_display_mode_changed(self, checked):
+        """Handle display mode change"""
+        if checked:
+            self.plot_results()
+
+    def maximize_plot(self, plot_type):
+        """Maximize a specific plot"""
+        if plot_type == 'time':
+            self.plot_splitter.setSizes([1000, 0, 0])
+        elif plot_type == 'freq1':
+            self.plot_splitter.setSizes([0, 1000, 0])
+        elif plot_type == 'freq2':
+            self.plot_splitter.setSizes([0, 0, 1000])
+            
+    def restore_window_state(self):
+        """Restore window geometry and state"""
+        geometry = self.settings.value("geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+
+    def closeEvent(self, event):
+        """Save window state on close"""
+        self.settings.setValue("geometry", self.saveGeometry())
+        super().closeEvent(event)
     
     def calculate_metrics(self):
         """Calculate and display metrics"""
