@@ -366,7 +366,18 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         self.init_ui()
         self.restore_window_state()
-    
+        
+        # Force cursor reset after initialization
+        QTimer.singleShot(500, self.force_cursor_reset)
+
+    def force_cursor_reset(self):
+        """Force cursor to be normal"""
+        while QApplication.overrideCursor() is not None:
+            QApplication.restoreOverrideCursor()
+        self.setCursor(Qt.ArrowCursor)
+        QApplication.setOverrideCursor(Qt.ArrowCursor)
+        QApplication.restoreOverrideCursor()
+
     def create_menu_bar(self):
         """Create menu bar"""
         menubar = self.menuBar()
@@ -1514,7 +1525,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         trunc_start_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
         trunc_layout.addWidget(trunc_start_title, row, 0)
         self.trunc_start_slider = QSlider(Qt.Horizontal)
-        self.trunc_start_slider.setRange(0, 60000)
+        self.trunc_start_slider.setRange(0, 3000)
         self.trunc_start_slider.setValue(10)
         self.trunc_start_slider.setStyleSheet("""
             QSlider::groove:horizontal {
@@ -1535,7 +1546,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.trunc_start_slider.valueChanged.connect(self.on_trunc_start_changed)
         trunc_layout.addWidget(self.trunc_start_slider, row, 1)
         self.trunc_start_spinbox = QSpinBox()
-        self.trunc_start_spinbox.setRange(0, 60000)
+        self.trunc_start_spinbox.setRange(0, 3000)
         self.trunc_start_spinbox.setValue(10)
         self.trunc_start_spinbox.setMinimumWidth(80)
         self.trunc_start_spinbox.setStyleSheet("""
@@ -1759,10 +1770,52 @@ class EnhancedNMRProcessingUI(QMainWindow):
         recon_layout.addWidget(self.enable_recon)
         
         recon_layout.addWidget(QLabel("Points:"))
+        
+        self.recon_slider = QSlider(Qt.Horizontal)
+        self.recon_slider.setRange(0, 3000)
+        self.recon_slider.setValue(0)
+        self.recon_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #e0e0e0;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #d32f2f;
+                width: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #b71c1c;
+            }
+        """)
+        self.recon_slider.valueChanged.connect(self.on_recon_slider_changed)
+        recon_layout.addWidget(self.recon_slider)
+
         self.recon_points = QSpinBox()
-        self.recon_points.setRange(0, 100)
+        self.recon_points.setRange(0, 3000)
         self.recon_points.setValue(0)
-        self.recon_points.valueChanged.connect(self.on_param_changed)
+        self.recon_points.setStyleSheet("""
+            QSpinBox {
+                font-weight: bold;
+                color: white;
+                background-color: #d32f2f;
+                padding: 4px 8px;
+                border-radius: 4px;
+                border: none;
+                font-size: 11px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #b71c1c;
+                border: none;
+                width: 16px;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #9a0007;
+            }
+        """)
+        self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
         recon_layout.addWidget(self.recon_points)
         
         recon_group.setLayout(recon_layout)
@@ -2358,6 +2411,20 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.zf_slider.blockSignals(True)
         self.zf_slider.setValue(int(value * 100))
         self.zf_slider.blockSignals(False)
+        self.schedule_processing()
+    
+    @Slot()
+    def on_recon_slider_changed(self, value):
+        self.recon_points.blockSignals(True)
+        self.recon_points.setValue(value)
+        self.recon_points.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_recon_spinbox_changed(self, value):
+        self.recon_slider.blockSignals(True)
+        self.recon_slider.setValue(int(value))
+        self.recon_slider.blockSignals(False)
         self.schedule_processing()
     
     @Slot()
@@ -3193,6 +3260,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
             if np.any(idx_visible_b):
                 max_val = np.max(y_spec_b_low[idx_visible_b])
                 if max_val > 0: y_spec_b_low = y_spec_b_low / max_val
+        else:
+            # Global normalization for Low Freq view
+            max_val_a = np.max(y_spec_a)
+            max_val_b = np.max(y_spec_b)
+            if max_val_a > 0: y_spec_a_low = y_spec_a_low / max_val_a
+            if max_val_b > 0: y_spec_b_low = y_spec_b_low / max_val_b
         
         self.freq1_canvas.fig.clear()
         self.freq1_canvas.axes = self.freq1_canvas.fig.add_subplot(111)
@@ -3239,6 +3312,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
             if np.any(idx_visible_b):
                 max_val = np.max(y_spec_b_high[idx_visible_b])
                 if max_val > 0: y_spec_b_high = y_spec_b_high / max_val
+        else:
+            # Global normalization for High Freq view
+            max_val_a = np.max(y_spec_a)
+            max_val_b = np.max(y_spec_b)
+            if max_val_a > 0: y_spec_a_high = y_spec_a_high / max_val_a
+            if max_val_b > 0: y_spec_b_high = y_spec_b_high / max_val_b
         
         self.freq2_canvas.fig.clear()
         self.freq2_canvas.axes = self.freq2_canvas.fig.add_subplot(111)
@@ -3645,10 +3724,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Ensure cursor is normal
-    while app.overrideCursor() is not None:
-        app.restoreOverrideCursor()
-    
     # Set font
     font = QFont("Segoe UI", 9)
     app.setFont(font)
@@ -3658,6 +3733,10 @@ def main():
     
     window = EnhancedNMRProcessingUI()
     window.show()
+    
+    # Ensure cursor is normal after initialization
+    while app.overrideCursor() is not None:
+        app.restoreOverrideCursor()
     
     sys.exit(app.exec())
 
