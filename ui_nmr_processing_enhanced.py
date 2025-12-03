@@ -2678,7 +2678,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 common_sr = None
                 common_at = None
                 
-                for folder in folders:
+                for i, folder in enumerate(folders):
+                    # Update progress
+                    self.progress_label.setText(f"Loading folder {i+1}/{len(folders)}: {os.path.basename(folder)}")
+                    QApplication.processEvents()
+                    
                     # Load data from each folder
                     if HAS_NMRDUINO:
                         # Try to load compiled data
@@ -3547,6 +3551,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
 
     def closeEvent(self, event):
         """Save window state on close"""
+        # Stop worker thread if running
+        if self.worker is not None:
+            if self.worker.isRunning():
+                self.worker.stop()
+                self.worker.wait(1000)
+                if self.worker.isRunning():
+                    self.worker.terminate()
+        
         self.settings.setValue("geometry", self.saveGeometry())
         super().closeEvent(event)
     
