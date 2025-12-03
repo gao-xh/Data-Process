@@ -89,38 +89,36 @@ def backward_linear_prediction(data, n_dead, order):
         
     return full_data
 
-def apply_phase_correction(spectrum, phi0, phi1, pivot_index=0):
+def apply_phase_correction(spectrum, phi0, phi1, pivot_index=None):
     """
-    Apply zero-order and first-order phase correction.
+    Apply zero-order and first-order phase correction with pivot support.
     
     Args:
         spectrum (np.ndarray): Complex spectrum.
         phi0 (float): Zero-order phase in degrees.
         phi1 (float): First-order phase in degrees (total phase shift across bandwidth).
-        pivot_index (int): Index of the pivot point for first-order correction (usually 0 or center).
+        pivot_index (int): Index of the pivot point. If None, defaults to center.
         
     Returns:
         np.ndarray: Phase-corrected complex spectrum.
     """
     N = len(spectrum)
     
+    if pivot_index is None:
+        pivot_index = N // 2
+    
     # Convert to radians
     phi0_rad = np.deg2rad(phi0)
     phi1_rad = np.deg2rad(phi1)
     
-    # Create phase ramp
-    # Normalized frequency from 0 to 1
-    freq_norm = np.linspace(0, 1, N)
+    # Create normalized frequency axis centered at pivot
+    # Range: -pivot/N to (N-pivot)/N
+    # This ensures that at index == pivot_index, the first order term is 0.
+    freq_norm = (np.arange(N) - pivot_index) / N
     
     # Total phase correction
-    # phi(f) = phi0 + phi1 * f
+    # phi(f) = phi0 + phi1 * (f - f_pivot)
     phase_corr = phi0_rad + phi1_rad * freq_norm
-    
-    # Apply correction
-    # S_corr = S * exp(-i * phi)  (Standard NMR convention is usually exp(-i*phi) or exp(i*phi) depending on definition)
-    # Let's use exp(1j * phase) and let the user adjust sign via slider if needed.
-    # Usually: Real part is Absorption.
-    # If we want to rotate M+iA to A+iD, we multiply by exp(i*phi).
     
     return spectrum * np.exp(1j * phase_corr)
 

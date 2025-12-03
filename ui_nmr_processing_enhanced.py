@@ -185,8 +185,9 @@ class ProcessingWorker(QThread):
         # Cache the unphased spectrum for fast updates
         spectrum_complex = yf.copy()
         
-        # Apply phase
-        yf_phased = apply_phase_correction(yf, phi0, phi1)
+        # Apply phase with pivot at center
+        pivot = len(yf) // 2
+        yf_phased = apply_phase_correction(yf, phi0, phi1, pivot_index=pivot)
         
         self.progress.emit("Processing complete!")
         
@@ -3109,7 +3110,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         phi0 = self.params['phase0']
         phi1 = self.params['phase1']
         
-        phased_spec = apply_phase_correction(spec, phi0, phi1)
+        # Use center as pivot for better UX
+        pivot = len(spec) // 2
+        
+        phased_spec = apply_phase_correction(spec, phi0, phi1, pivot_index=pivot)
         
         # Update processed result
         self.processed['spectrum'] = phased_spec
