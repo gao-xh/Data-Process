@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QSlider, QSpinBox, QDoubleSpinBox,
     QGroupBox, QCheckBox, QRadioButton, QFileDialog, QTextEdit, QMessageBox,
     QGridLayout, QTabWidget, QProgressBar, QComboBox, QSplitter,
-    QScrollArea, QMenuBar, QMenu
+    QScrollArea, QMenuBar, QMenu, QDialog, QListWidget
 )
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSettings
 from PySide6.QtGui import QFont
@@ -68,6 +68,94 @@ try:
 except:
     HAS_NMRDUINO = False
     print("Warning: nmrduino_util not found, some features disabled")
+
+
+class MultiFolderDialog(QDialog):
+    """Dialog for selecting multiple folders to combine"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Load Multiple Folders (Combine)")
+        self.resize(600, 400)
+        self.folders = []
+        
+        layout = QVBoxLayout(self)
+        
+        info_label = QLabel("Add multiple experiment folders to combine them into a single dataset.\n"
+                          "This is useful for experiments split across multiple directories.\n"
+                          "Data will be averaged weighted by scan count.")
+        info_label.setStyleSheet("color: #666; font-style: italic; margin-bottom: 10px;")
+        layout.addWidget(info_label)
+        
+        self.list_widget = QListWidget()
+        layout.addWidget(self.list_widget)
+        
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("Add Folder...")
+        add_btn.clicked.connect(self.add_folder)
+        remove_btn = QPushButton("Remove Selected")
+        remove_btn.clicked.connect(self.remove_folder)
+        clear_btn = QPushButton("Clear All")
+        clear_btn.clicked.connect(self.clear_all)
+        
+        btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(remove_btn)
+        btn_layout.addWidget(clear_btn)
+        layout.addLayout(btn_layout)
+        
+        line = QWidget()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #e0e0e0;")
+        layout.addWidget(line)
+        
+        action_layout = QHBoxLayout()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        self.load_btn = QPushButton("Load Combined Data")
+        self.load_btn.clicked.connect(self.accept)
+        self.load_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                font-weight: bold;
+                padding: 6px 12px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+        """)
+        
+        action_layout.addStretch()
+        action_layout.addWidget(cancel_btn)
+        action_layout.addWidget(self.load_btn)
+        layout.addLayout(action_layout)
+        
+        self.update_buttons()
+        
+    def add_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Experiment Folder")
+        if folder and folder not in self.folders:
+            self.folders.append(folder)
+            self.list_widget.addItem(folder)
+            self.update_buttons()
+            
+    def remove_folder(self):
+        row = self.list_widget.currentRow()
+        if row >= 0:
+            self.folders.pop(row)
+            self.list_widget.takeItem(row)
+            self.update_buttons()
+            
+    def clear_all(self):
+        self.folders = []
+        self.list_widget.clear()
+        self.update_buttons()
+            
+    def update_buttons(self):
+        self.load_btn.setEnabled(len(self.folders) > 0)
+        
+    def get_folders(self):
+        return self.folders
 
 
 class MplCanvas(FigureCanvas):
@@ -315,6 +403,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         load_action = file_menu.addAction('Load Folder...')
         load_action.setShortcut('Ctrl+O')
         load_action.triggered.connect(self.load_folder)
+        
+        load_multi_action = file_menu.addAction('Load Multiple Folders (Combine)...')
+        load_multi_action.setShortcut('Ctrl+Shift+O')
+        load_multi_action.triggered.connect(self.load_multiple_folders)
         
         load_params_action = file_menu.addAction('Load Parameters...')
         load_params_action.setShortcut('Ctrl+L')
@@ -1908,7 +2000,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq_low_max.setSuffix(" Hz")
         self.freq_low_max.setStyleSheet("font-size: 10px; padding: 4px;")
         freq_layout.addWidget(self.freq_low_max, 0, 2)
-        
+
+
+
         high_freq_title = QLabel("High Frequency View:")
         high_freq_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
         freq_layout.addWidget(high_freq_title, 1, 0)
@@ -2565,6 +2659,111 @@ class EnhancedNMRProcessingUI(QMainWindow):
             
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load data:\n{e}")
+
+    def load_multiple_folders(self):
+        """Load and combine data from multiple folders"""
+        dialog = MultiFolderDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            folders = dialog.get_folders()
+            if not folders:
+                return
+                
+            try:
+                self.progress_bar.setVisible(True)
+                self.progress_label.setText("Combining data from multiple folders...")
+                QApplication.processEvents()
+                
+                total_scans = 0
+                weighted_sum_data = None
+                common_sr = None
+                common_at = None
+                
+                for folder in folders:
+                    # Load data from each folder
+                    if HAS_NMRDUINO:
+                        # Try to load compiled data
+                        compiled_path = os.path.join(folder, "halp_compiled.npy")
+                        if os.path.exists(compiled_path):
+                            halp = np.load(compiled_path)
+                            sr = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
+                            at = np.load(os.path.join(folder, "acq_time_compiled.npy"))
+                            scans = nmr_util.scan_number_extraction(folder)
+                        else:
+                            # Load and compile
+                            compiled = nmr_util.nmrduino_dat_interp(folder, 0)
+                            halp = compiled[0]
+                            sr = compiled[1]
+                            at = compiled[2]
+                            scans = nmr_util.scan_number_extraction(folder)
+                    else:
+                        # Manual loading fallback
+                        compiled_path = os.path.join(folder, "halp_compiled.npy")
+                        if os.path.exists(compiled_path):
+                            halp = np.load(compiled_path)
+                            sr = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
+                            at = np.load(os.path.join(folder, "acq_time_compiled.npy"))
+                            # Try to count .dat files
+                            dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
+                            scans = len(dat_files) if dat_files else 1
+                        else:
+                            raise FileNotFoundError(f"No compiled data found in {folder}")
+                    
+                    # Check consistency
+                    if common_sr is None:
+                        common_sr = sr
+                        common_at = at
+                        weighted_sum_data = np.zeros_like(halp, dtype=complex)
+                    else:
+                        if abs(sr - common_sr) > 1.0:
+                            raise ValueError(f"Sampling rate mismatch in {folder}")
+                        if abs(at - common_at) > 0.01:
+                            # Allow small mismatch, maybe truncate?
+                            # For now, strict check or resize
+                            if len(halp) != len(weighted_sum_data):
+                                # Resize to match smallest? Or error?
+                                # Let's assume they must match
+                                raise ValueError(f"Data length mismatch in {folder}")
+                    
+                    # Accumulate weighted sum
+                    # Assuming halp is the average of scans in that folder
+                    weighted_sum_data += halp * scans
+                    total_scans += scans
+                
+                # Calculate final average
+                if total_scans > 0:
+                    self.halp = weighted_sum_data / total_scans
+                    self.sampling_rate = common_sr
+                    self.acq_time = common_at
+                    self.scan_count = total_scans
+                    self.current_path = folders[0] # Use first folder as reference path
+                    
+                    self.data_info.setText(
+                        f"<b>Combined:</b> {len(folders)} folders<br>"
+                        f"<b>Points:</b> {len(self.halp)}<br>"
+                        f"<b>Sampling:</b> {self.sampling_rate:.1f} Hz<br>"
+                        f"<b>Acq Time:</b> {self.acq_time:.3f} s<br>"
+                        f"<b>Total Scans:</b> {self.scan_count}"
+                    )
+                    
+                    # Enable controls
+                    self.process_btn.setEnabled(True)
+                    self.save_params_btn.setEnabled(True)
+                    
+                    # Reset scan selection (since we combined, individual scan selection is complex)
+                    self.scan_mode_all.setChecked(True)
+                    self.scan_selection_info.setText("Scan selection disabled for combined data")
+                    self.apply_scan_btn.setEnabled(False)
+                    
+                    # Auto process
+                    self.process_data()
+                    
+                self.progress_bar.setVisible(False)
+                self.progress_label.setText("")
+                
+            except Exception as e:
+                self.progress_bar.setVisible(False)
+                self.progress_label.setText("")
+                QMessageBox.critical(self, "Combine Error", f"Failed to combine folders:\n{e}")
     
     @Slot()
     def process_data(self):
@@ -3342,6 +3541,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         geometry = self.settings.value("geometry")
         if geometry:
             self.restoreGeometry(geometry)
+            
+        # Ensure cursor is reset
+        QApplication.restoreOverrideCursor()
 
     def closeEvent(self, event):
         """Save window state on close"""
@@ -3430,6 +3632,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    
+    # Ensure cursor is normal
+    while app.overrideCursor() is not None:
+        app.restoreOverrideCursor()
     
     # Set font
     font = QFont("Segoe UI", 9)
