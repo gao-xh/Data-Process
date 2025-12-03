@@ -1747,6 +1747,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.view_mag.toggled.connect(self.update_plot_view)
         display_layout.addWidget(self.view_mag)
         
+        # Absolute value checkbox
+        self.show_absolute = QCheckBox("Absolute Value")
+        self.show_absolute.setStyleSheet("font-weight: bold; color: #d32f2f;")
+        self.show_absolute.stateChanged.connect(self.update_plot_view)
+        display_layout.addWidget(self.show_absolute)
+        
         display_group.setLayout(display_layout)
         layout.addWidget(display_group)
         
@@ -2730,10 +2736,18 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Determine plot data based on view mode
         if self.view_real.isChecked():
             plot_data = np.real(spectrum)
-            ylabel = "Amplitude (Real)"
+            if self.show_absolute.isChecked():
+                plot_data = np.abs(plot_data)
+                ylabel = "Amplitude |Real|"
+            else:
+                ylabel = "Amplitude (Real)"
         elif self.view_imag.isChecked():
             plot_data = np.imag(spectrum)
-            ylabel = "Amplitude (Imag)"
+            if self.show_absolute.isChecked():
+                plot_data = np.abs(plot_data)
+                ylabel = "Amplitude |Imag|"
+            else:
+                ylabel = "Amplitude (Imag)"
         else:
             plot_data = np.abs(spectrum)
             ylabel = "Magnitude"
