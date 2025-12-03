@@ -2458,6 +2458,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_slider.setValue(int(value))
         self.recon_slider.blockSignals(False)
         self.schedule_processing()
+
+    @Slot(bool)
+    def on_sync_recon_toggled(self, checked):
+        self.recon_slider.setEnabled(not checked)
+        self.recon_points.setEnabled(not checked)
+        if checked:
+            val = self.trunc_start_slider.value()
+            self.recon_slider.setValue(val)
+            self.recon_points.setValue(val)
+            self.schedule_processing()
     
     @Slot()
     def on_param_changed(self):
