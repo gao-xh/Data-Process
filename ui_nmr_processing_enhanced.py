@@ -1832,6 +1832,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
         recon_layout.addWidget(self.recon_points)
         
+        recon_layout.addWidget(QLabel("Order:"))
+        self.recon_order = QSpinBox()
+        self.recon_order.setRange(1, 512)
+        self.recon_order.setValue(64)
+        self.recon_order.setToolTip("Linear Prediction Order (Number of coefficients)")
+        self.recon_order.valueChanged.connect(self.on_param_changed)
+        recon_layout.addWidget(self.recon_order)
+        
         recon_group.setLayout(recon_layout)
         layout.addWidget(recon_group)
         
@@ -2912,6 +2920,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             # NEW Params
             'enable_recon': self.enable_recon.isChecked(),
             'recon_points': self.recon_points.value(),
+            'recon_order': self.recon_order.value(),
             'phase0': self.phase0_spin.value(),
             'phase1': self.phase1_spin.value()
         }
