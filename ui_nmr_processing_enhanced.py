@@ -215,21 +215,31 @@ class ProcessingWorker(QThread):
         )
         svd_corrected = halp - smooth_svd
         
+        # Step 2: Time domain truncation (Start)
+        if not self._running: return None
+        self.progress.emit("Applying truncation...")
+        trunc_start = int(self.params['trunc_start'])
+        trunc_end = int(self.params['trunc_end'])
+        
+        # Apply start truncation first
+        if trunc_start > 0:
+            svd_corrected = svd_corrected[trunc_start:]
+            
         # Step 1.5: Backward Linear Prediction (Dead-time reconstruction)
+        # Now we reconstruct based on the "good" data after truncation
         if self.params.get('enable_recon', False):
             self.progress.emit("Reconstructing dead-time...")
             n_dead = int(self.params.get('recon_points', 0))
             order = int(self.params.get('recon_order', 10))
             if n_dead > 0:
                 svd_corrected = backward_linear_prediction(svd_corrected, n_dead, order)
-
-        self.progress.emit("Applying truncation...")
         
-        # Step 2: Time domain truncation
-        if not self._running: return None
-        trunc_start = int(self.params['trunc_start'])
-        trunc_end = int(self.params['trunc_end'])
-        svd_corrected = svd_corrected[trunc_start:-trunc_end if trunc_end > 0 else None]
+        # Apply end truncation
+        if trunc_end > 0:
+            svd_corrected = svd_corrected[:-trunc_end]
+            
+        # Calculate effective acquisition time based on final length
+        # Note: This assumes sampling rate is constant
         acq_time_effective = acq_time * (len(svd_corrected) / len(halp))
         
         self.progress.emit("Applying apodization...")
@@ -1769,6 +1779,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.enable_recon.stateChanged.connect(self.on_param_changed)
         recon_layout.addWidget(self.enable_recon)
         
+        self.sync_recon_checkbox = QCheckBox("Sync with Truncation")
+        self.sync_recon_checkbox.toggled.connect(self.on_sync_recon_toggled)
+        recon_layout.addWidget(self.sync_recon_checkbox)
+        
         recon_layout.addWidget(QLabel("Points:"))
         
         self.recon_slider = QSlider(Qt.Horizontal)
@@ -2360,6 +2374,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.trunc_start_spinbox.blockSignals(True)
         self.trunc_start_spinbox.setValue(value)
         self.trunc_start_spinbox.blockSignals(False)
+        
+        if hasattr(self, 'sync_recon_checkbox') and self.sync_recon_checkbox.isChecked():
+            self.recon_slider.blockSignals(True)
+            self.recon_points.blockSignals(True)
+            self.recon_slider.setValue(value)
+            self.recon_points.setValue(value)
+            self.recon_slider.blockSignals(False)
+            self.recon_points.blockSignals(False)
+            
         self.schedule_processing()
     
     @Slot()
@@ -2367,6 +2390,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.trunc_start_slider.blockSignals(True)
         self.trunc_start_slider.setValue(int(value))
         self.trunc_start_slider.blockSignals(False)
+        
+        if hasattr(self, 'sync_recon_checkbox') and self.sync_recon_checkbox.isChecked():
+            self.recon_slider.blockSignals(True)
+            self.recon_points.blockSignals(True)
+            self.recon_slider.setValue(int(value))
+            self.recon_points.setValue(int(value))
+            self.recon_slider.blockSignals(False)
+            self.recon_points.blockSignals(False)
+            
         self.schedule_processing()
     
     @Slot()
