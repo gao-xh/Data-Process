@@ -2894,14 +2894,22 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Stop previous worker if running
         if self.worker is not None:
-            if self.worker.isRunning():
-                self.worker.stop()
-                self.worker.wait(2000)
+            try:
                 if self.worker.isRunning():
-                    self.worker.terminate()
+                    self.worker.stop()
+                    self.worker.quit()
                     self.worker.wait(1000)
+                    if self.worker.isRunning():
+                        self.worker.terminate()
+                        self.worker.wait(500)
+            except RuntimeError:
+                pass # Worker might be already deleted
+            
             # Cleanup old worker
-            self.worker.deleteLater()
+            try:
+                self.worker.deleteLater()
+            except RuntimeError:
+                pass
             self.worker = None
         
         # Update parameters from UI
