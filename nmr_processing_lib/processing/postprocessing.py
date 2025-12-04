@@ -149,54 +149,99 @@ def apply_broadening(
     return broadened
 
 
+def air_pls(data, lambda_=100, porder=1, itermax=15):
+    """
+    Adaptive Iteratively Reweighted Penalized Least Squares for baseline fitting
+    
+    Args:
+        data: Input data (1D array)
+        lambda_: Smoothness parameter (larger = smoother baseline)
+        porder: Order of differences (1, 2, or 3)
+        itermax: Maximum number of iterations
+        
+    Returns:
+        Baseline array
+    """
+    from scipy import sparse
+    from scipy.sparse.linalg import spsolve
+    
+    m = data.shape[0]
+    w = np.ones(m)
+    
+    # Construct difference matrix
+    E = sparse.eye(m, format='csc')
+    D = E.copy()
+    for i in range(porder):
+        D = D[1:] - D[:-1]
+    
+    H = lambda_ * D.T @ D
+    
+    for i in range(itermax):
+        W = sparse.diags(w, 0, shape=(m, m))
+        Z = W + H
+        z = spsolve(Z, w * data)
+        d = data - z
+        
+        # Create new weights
+        dssn = np.abs(d[d < 0].sum())
+        if dssn < 0.001 * (abs(data).sum()): 
+            break
+            
+        w[d >= 0] = 0
+        w[d < 0] = np.exp(i * np.abs(d[d < 0]) / dssn)
+        w[0] = np.exp(i * (d[d < 0]).max() / dssn) 
+        w[-1] = w[0]
+        
+    return z
+
+
 def baseline_correction(
     freq_axis: np.ndarray,
     spec_data: np.ndarray,
     method: str = 'polynomial',
     order: int = 1,
-    noise_regions: Optional[list] = None
+    noise_regions: Optional[list] = None,
+    lambda_: float = 100
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Correct baseline in frequency domain spectrum.
     
     Args:
         freq_axis: Frequency axis
-        spec_data: Spectrum data (real or magnitude)
+        spec_data: Spectrum data (real or complex)
         method: Baseline correction method
             - 'polynomial': Polynomial fit
             - 'median': Median-based rolling baseline
             - 'regions': Fit baseline from specified noise regions
+            - 'air_pls': Adaptive Iteratively Reweighted Penalized Least Squares
         order: Polynomial order (for polynomial method)
         noise_regions: List of (freq_min, freq_max) tuples for noise regions
+        lambda_: Smoothness parameter for air_pls
     
     Returns:
         Tuple of (corrected_spectrum, baseline)
-    
-    Example:
-        >>> # Polynomial baseline
-        >>> corrected, baseline = baseline_correction(xf, yf, method='polynomial', order=2)
-        >>> 
-        >>> # Using noise regions
-        >>> noise_regions = [(0, 50), (350, 400)]
-        >>> corrected, baseline = baseline_correction(xf, yf, method='regions', 
-        ...                                          noise_regions=noise_regions)
     """
-    # Ensure we're working with real/magnitude data
-    if np.iscomplexobj(spec_data):
-        spec_data = np.abs(spec_data)
+    # Handle complex data: process Real part, keep Imag part unchanged
+    is_complex = np.iscomplexobj(spec_data)
+    if is_complex:
+        data_to_fit = np.real(spec_data)
+    else:
+        data_to_fit = spec_data
+    
+    baseline = np.zeros_like(data_to_fit)
     
     if method == 'polynomial':
         # Fit polynomial to entire spectrum
-        coeffs = np.polyfit(freq_axis, spec_data, order)
+        coeffs = np.polyfit(freq_axis, data_to_fit, order)
         baseline = np.polyval(coeffs, freq_axis)
     
     elif method == 'median':
         # Rolling median baseline
         from scipy.signal import medfilt
-        window_size = max(3, len(spec_data) // 100)
+        window_size = max(3, len(data_to_fit) // 100)
         if window_size % 2 == 0:
             window_size += 1
-        baseline = medfilt(spec_data, kernel_size=window_size)
+        baseline = medfilt(data_to_fit, kernel_size=window_size)
     
     elif method == 'regions':
         if noise_regions is None:
@@ -209,17 +254,24 @@ def baseline_correction(
         for freq_min, freq_max in noise_regions:
             mask = (freq_axis >= freq_min) & (freq_axis <= freq_max)
             noise_freq.extend(freq_axis[mask])
-            noise_spec.extend(spec_data[mask])
+            noise_spec.extend(data_to_fit[mask])
         
         # Fit polynomial to noise regions
         coeffs = np.polyfit(noise_freq, noise_spec, order)
         baseline = np.polyval(coeffs, freq_axis)
+        
+    elif method == 'air_pls':
+        baseline = air_pls(data_to_fit, lambda_=lambda_)
     
     else:
         raise ValueError(f"Unknown method: {method}")
     
     # Subtract baseline
-    corrected = spec_data - baseline
+    if is_complex:
+        # Only correct real part, preserve imaginary part
+        corrected = (np.real(spec_data) - baseline) + 1j * np.imag(spec_data)
+    else:
+        corrected = spec_data - baseline
     
     return corrected, baseline
 

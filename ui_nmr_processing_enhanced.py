@@ -54,12 +54,14 @@ try:
     from nmr_processing_lib.processing.zulf_algorithms import (
         backward_linear_prediction, apply_phase_correction, auto_phase
     )
+    from nmr_processing_lib.processing.postprocessing import baseline_correction
 except ImportError:
     print("Warning: Could not import ZULF algorithms. Phase correction disabled.")
     # Define dummy functions if import fails
     def backward_linear_prediction(data, n, order): return data
     def apply_phase_correction(spec, p0, p1): return spec
     def auto_phase(spec): return 0, 0
+    def baseline_correction(freq, spec, method='polynomial', order=1, lambda_=100): return spec, np.zeros_like(spec)
 
 # Import nmrduino_util (using fixed version with proper path handling)
 try:
@@ -287,6 +289,28 @@ class ProcessingWorker(QThread):
         pivot = len(yf) // 2
         yf_phased = apply_phase_correction(yf, phi0, phi1, pivot_index=pivot)
         
+        # Step 8: Baseline Correction (Frequency Domain)
+        baseline_method = self.params.get('baseline_method', 'none')
+        freq_baseline = np.zeros_like(yf_phased)
+        
+        if baseline_method != 'none':
+            self.progress.emit(f"Applying {baseline_method} baseline correction...")
+            try:
+                # Extract parameters
+                order = int(self.params.get('baseline_order', 1))
+                lam = float(self.params.get('baseline_lambda', 100))
+                
+                # Apply correction
+                yf_phased, freq_baseline = baseline_correction(
+                    xf, 
+                    yf_phased, 
+                    method=baseline_method, 
+                    order=order, 
+                    lambda_=lam
+                )
+            except Exception as e:
+                print(f"Baseline correction error: {e}")
+        
         self.progress.emit("Processing complete!")
         
         if not self._running: return None
@@ -297,7 +321,8 @@ class ProcessingWorker(QThread):
             'spectrum': yf_phased,
             'spectrum_complex': spectrum_complex,
             'acq_time_effective': acq_time * (1 + zf_factor),
-            'baseline': smooth_svd
+            'baseline': smooth_svd,
+            'freq_baseline': freq_baseline
         }
 
 
@@ -1665,49 +1690,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
         recon_group.setLayout(recon_layout)
         layout.addWidget(recon_group)
         
-        # --- NEW: Phase Correction ---
-        phase_group = QGroupBox("Phase Correction")
-        phase_group.setStyleSheet(self.get_groupbox_style("#1976d2"))
-        phase_layout = QGridLayout()
-        
-        # Phase 0
-        phase_layout.addWidget(QLabel("Phase 0:"), 0, 0)
-        self.phase0_slider = QSlider(Qt.Horizontal)
-        self.phase0_slider.setRange(-180, 180)
-        self.phase0_slider.setValue(0)
-        self.phase0_slider.setStyleSheet(self.get_slider_style("#1976d2", "#1565c0"))
-        self.phase0_slider.valueChanged.connect(self.on_phase_changed) # Special handler for fast update
-        phase_layout.addWidget(self.phase0_slider, 0, 1)
-        self.phase0_spin = QDoubleSpinBox()
-        self.phase0_spin.setRange(-180, 180)
-        self.phase0_spin.setSingleStep(1)
-        self.phase0_spin.setStyleSheet(self.get_spinbox_style("#1976d2", "#1565c0", "#0d47a1"))
-        self.phase0_spin.valueChanged.connect(self.on_phase_spin_changed)
-        phase_layout.addWidget(self.phase0_spin, 0, 2)
-        
-        # Phase 1
-        phase_layout.addWidget(QLabel("Phase 1:"), 1, 0)
-        self.phase1_slider = QSlider(Qt.Horizontal)
-        self.phase1_slider.setRange(-10000, 10000)
-        self.phase1_slider.setValue(0)
-        self.phase1_slider.setStyleSheet(self.get_slider_style("#1976d2", "#1565c0"))
-        self.phase1_slider.valueChanged.connect(self.on_phase_changed)
-        phase_layout.addWidget(self.phase1_slider, 1, 1)
-        self.phase1_spin = QDoubleSpinBox()
-        self.phase1_spin.setRange(-10000, 10000)
-        self.phase1_spin.setSingleStep(10)
-        self.phase1_spin.setStyleSheet(self.get_spinbox_style("#1976d2", "#1565c0", "#0d47a1"))
-        self.phase1_spin.valueChanged.connect(self.on_phase_spin_changed)
-        phase_layout.addWidget(self.phase1_spin, 1, 2)
-        
-        # Auto Phase
-        self.auto_phase_btn = QPushButton("Auto Phase")
-        self.auto_phase_btn.clicked.connect(self.run_auto_phase)
-        phase_layout.addWidget(self.auto_phase_btn, 2, 0, 1, 3)
-        
-        phase_group.setLayout(phase_layout)
-        layout.addWidget(phase_group)
-        
         layout.addStretch()
         return tab
 
@@ -1791,6 +1773,86 @@ class EnhancedNMRProcessingUI(QMainWindow):
         fft_layout.addWidget(fft_info)
         fft_group.setLayout(fft_layout)
         layout.addWidget(fft_group)
+        
+        # --- Phase Correction ---
+        phase_group = QGroupBox("Phase Correction")
+        phase_group.setStyleSheet(self.get_groupbox_style("#1976d2"))
+        phase_layout = QGridLayout()
+        
+        # Phase 0
+        phase_layout.addWidget(QLabel("Phase 0:"), 0, 0)
+        self.phase0_slider = QSlider(Qt.Horizontal)
+        self.phase0_slider.setRange(-180, 180)
+        self.phase0_slider.setValue(0)
+        self.phase0_slider.setStyleSheet(self.get_slider_style("#1976d2", "#1565c0"))
+        self.phase0_slider.valueChanged.connect(self.on_phase_changed) # Special handler for fast update
+        phase_layout.addWidget(self.phase0_slider, 0, 1)
+        self.phase0_spin = QDoubleSpinBox()
+        self.phase0_spin.setRange(-180, 180)
+        self.phase0_spin.setSingleStep(1)
+        self.phase0_spin.setStyleSheet(self.get_spinbox_style("#1976d2", "#1565c0", "#0d47a1"))
+        self.phase0_spin.valueChanged.connect(self.on_phase_spin_changed)
+        phase_layout.addWidget(self.phase0_spin, 0, 2)
+        
+        # Phase 1
+        phase_layout.addWidget(QLabel("Phase 1:"), 1, 0)
+        self.phase1_slider = QSlider(Qt.Horizontal)
+        self.phase1_slider.setRange(-10000, 10000)
+        self.phase1_slider.setValue(0)
+        self.phase1_slider.setStyleSheet(self.get_slider_style("#1976d2", "#1565c0"))
+        self.phase1_slider.valueChanged.connect(self.on_phase_changed)
+        phase_layout.addWidget(self.phase1_slider, 1, 1)
+        self.phase1_spin = QDoubleSpinBox()
+        self.phase1_spin.setRange(-10000, 10000)
+        self.phase1_spin.setSingleStep(10)
+        self.phase1_spin.setStyleSheet(self.get_spinbox_style("#1976d2", "#1565c0", "#0d47a1"))
+        self.phase1_spin.valueChanged.connect(self.on_phase_spin_changed)
+        phase_layout.addWidget(self.phase1_spin, 1, 2)
+        
+        # Auto Phase
+        self.auto_phase_btn = QPushButton("Auto Phase")
+        self.auto_phase_btn.clicked.connect(self.run_auto_phase)
+        phase_layout.addWidget(self.auto_phase_btn, 2, 0, 1, 3)
+        
+        phase_group.setLayout(phase_layout)
+        layout.addWidget(phase_group)
+
+        # --- Baseline Correction ---
+        baseline_group = QGroupBox("Baseline Correction")
+        baseline_group.setStyleSheet(self.get_groupbox_style("#fbc02d"))
+        baseline_layout = QGridLayout()
+        
+        baseline_layout.addWidget(QLabel("Method:"), 0, 0)
+        self.baseline_method = QComboBox()
+        self.baseline_method.addItems(["None", "Polynomial", "AirPLS"])
+        self.baseline_method.currentTextChanged.connect(self.on_baseline_method_changed)
+        baseline_layout.addWidget(self.baseline_method, 0, 1, 1, 2)
+        
+        # Polynomial Order
+        self.lbl_poly = QLabel("Poly Order:")
+        baseline_layout.addWidget(self.lbl_poly, 1, 0)
+        self.baseline_poly_order = QSpinBox()
+        self.baseline_poly_order.setRange(0, 10)
+        self.baseline_poly_order.setValue(1)
+        self.baseline_poly_order.valueChanged.connect(self.on_param_changed)
+        baseline_layout.addWidget(self.baseline_poly_order, 1, 1, 1, 2)
+        
+        # AirPLS Lambda
+        self.lbl_lambda = QLabel("Lambda:")
+        baseline_layout.addWidget(self.lbl_lambda, 2, 0)
+        self.baseline_lambda = QSpinBox()
+        self.baseline_lambda.setRange(10, 100000)
+        self.baseline_lambda.setValue(100)
+        self.baseline_lambda.setSingleStep(100)
+        self.baseline_lambda.valueChanged.connect(self.on_param_changed)
+        baseline_layout.addWidget(self.baseline_lambda, 2, 1, 1, 2)
+        
+        # Initial visibility
+        self.lbl_lambda.setVisible(False)
+        self.baseline_lambda.setVisible(False)
+        
+        baseline_group.setLayout(baseline_layout)
+        layout.addWidget(baseline_group)
         
         # Frequency range controls
         freq_group = QGroupBox("Frequency Display Range")
@@ -2229,6 +2291,20 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.recon_slider.setValue(val)
             self.recon_points.setValue(val)
             self.schedule_processing()
+
+    @Slot(str)
+    def on_baseline_method_changed(self, method):
+        """Update visibility of baseline correction parameters"""
+        is_poly = method == "Polynomial"
+        is_airpls = method == "AirPLS"
+        
+        self.lbl_poly.setVisible(is_poly)
+        self.baseline_poly_order.setVisible(is_poly)
+        
+        self.lbl_lambda.setVisible(is_airpls)
+        self.baseline_lambda.setVisible(is_airpls)
+        
+        self.schedule_processing()
     
     @Slot()
     def on_param_changed(self):
@@ -2683,7 +2759,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'recon_points': self.recon_points.value(),
             'recon_order': self.recon_order.value(),
             'phase0': self.phase0_spin.value(),
-            'phase1': self.phase1_spin.value()
+            'phase1': self.phase1_spin.value(),
+            # Baseline Params
+            'baseline_method': self.baseline_method.currentText().lower(),
+            'baseline_order': self.baseline_poly_order.value(),
+            'baseline_lambda': self.baseline_lambda.value()
         }
         
         # Update params_b if using same parameters
