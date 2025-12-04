@@ -1596,39 +1596,63 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # --- NEW: Dead-time Reconstruction ---
         recon_group = QGroupBox("Dead-time Reconstruction (Backward LP)")
         recon_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))
-        recon_layout = QHBoxLayout()
+        recon_layout = QGridLayout()
+        recon_layout.setSpacing(10)
+        recon_layout.setContentsMargins(12, 15, 12, 12)
         
+        # Row 0: Checkboxes
+        checkbox_layout = QHBoxLayout()
         self.enable_recon = QCheckBox("Enable Reconstruction")
         self.enable_recon.stateChanged.connect(self.on_param_changed)
-        recon_layout.addWidget(self.enable_recon)
+        checkbox_layout.addWidget(self.enable_recon)
         
         self.sync_recon_checkbox = QCheckBox("Sync with Truncation")
         self.sync_recon_checkbox.toggled.connect(self.on_sync_recon_toggled)
-        recon_layout.addWidget(self.sync_recon_checkbox)
+        checkbox_layout.addWidget(self.sync_recon_checkbox)
+        checkbox_layout.addStretch()
         
-        recon_layout.addWidget(QLabel("Points:"))
+        recon_layout.addLayout(checkbox_layout, 0, 0, 1, 3)
+        
+        # Row 1: Points
+        points_label = QLabel("Recon Points:")
+        points_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        recon_layout.addWidget(points_label, 1, 0)
         
         self.recon_slider = QSlider(Qt.Horizontal)
         self.recon_slider.setRange(0, 3000)
         self.recon_slider.setValue(0)
         self.recon_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
         self.recon_slider.valueChanged.connect(self.on_recon_slider_changed)
-        recon_layout.addWidget(self.recon_slider)
+        recon_layout.addWidget(self.recon_slider, 1, 1)
 
         self.recon_points = QSpinBox()
         self.recon_points.setRange(0, 3000)
         self.recon_points.setValue(0)
+        self.recon_points.setMinimumWidth(80)
         self.recon_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
         self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
-        recon_layout.addWidget(self.recon_points)
+        recon_layout.addWidget(self.recon_points, 1, 2)
         
-        recon_layout.addWidget(QLabel("Order:"))
+        # Row 2: Order
+        order_label = QLabel("LP Order:")
+        order_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        recon_layout.addWidget(order_label, 2, 0)
+        
+        self.recon_order_slider = QSlider(Qt.Horizontal)
+        self.recon_order_slider.setRange(1, 512)
+        self.recon_order_slider.setValue(64)
+        self.recon_order_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
+        self.recon_order_slider.valueChanged.connect(self.on_recon_order_slider_changed)
+        recon_layout.addWidget(self.recon_order_slider, 2, 1)
+
         self.recon_order = QSpinBox()
         self.recon_order.setRange(1, 512)
         self.recon_order.setValue(64)
+        self.recon_order.setMinimumWidth(80)
         self.recon_order.setToolTip("Linear Prediction Order (Number of coefficients)")
-        self.recon_order.valueChanged.connect(self.on_param_changed)
-        recon_layout.addWidget(self.recon_order)
+        self.recon_order.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
+        self.recon_order.valueChanged.connect(self.on_recon_order_spinbox_changed)
+        recon_layout.addWidget(self.recon_order, 2, 2)
         
         recon_group.setLayout(recon_layout)
         layout.addWidget(recon_group)
@@ -2172,6 +2196,20 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_slider.blockSignals(True)
         self.recon_slider.setValue(int(value))
         self.recon_slider.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_recon_order_slider_changed(self, value):
+        self.recon_order.blockSignals(True)
+        self.recon_order.setValue(value)
+        self.recon_order.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_recon_order_spinbox_changed(self, value):
+        self.recon_order_slider.blockSignals(True)
+        self.recon_order_slider.setValue(int(value))
+        self.recon_order_slider.blockSignals(False)
         self.schedule_processing()
 
     @Slot(bool)
