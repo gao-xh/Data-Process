@@ -225,14 +225,14 @@ class ProcessingWorker(QThread):
         if trunc_start > 0:
             svd_corrected = svd_corrected[trunc_start:]
             
-        # Step 1.5: Backward Linear Prediction (Dead-time reconstruction)
+        # Step 1.5: Backward Linear Prediction
         # Now we reconstruct based on the "good" data after truncation
         if self.params.get('enable_recon', False):
-            self.progress.emit("Reconstructing dead-time...")
-            n_dead = int(self.params.get('recon_points', 0))
+            self.progress.emit("Applying Backward LP...")
+            n_backward = int(self.params.get('recon_points', 0))
             order = int(self.params.get('recon_order', 10))
-            if n_dead > 0:
-                svd_corrected = backward_linear_prediction(svd_corrected, n_dead, order)
+            if n_backward > 0:
+                svd_corrected = backward_linear_prediction(svd_corrected, n_backward, order)
         
         # Apply end truncation
         if trunc_end > 0:
@@ -1214,7 +1214,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Tab 2: Reconstruction & Phase (Dead-time, Phase)
         recon_tab = self.create_recon_tab()
-        param_tabs.addTab(recon_tab, "Reconstruction & Phase")
+        param_tabs.addTab(recon_tab, "Backward LP & Phase")
         
         # Tab 3: Transform & Display (Zero Filling, Display Mode)
         transform_tab = self.create_transform_tab()
@@ -1593,8 +1593,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout.setSpacing(12)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # --- NEW: Dead-time Reconstruction ---
-        recon_group = QGroupBox("Dead-time Reconstruction (Backward LP)")
+        # --- NEW: Backward Linear Prediction ---
+        recon_group = QGroupBox("Backward Linear Prediction (LP)")
         recon_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))
         recon_layout = QGridLayout()
         recon_layout.setSpacing(10)
@@ -1602,11 +1602,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Row 0: Checkboxes
         checkbox_layout = QHBoxLayout()
-        self.enable_recon = QCheckBox("Enable Reconstruction")
+        self.enable_recon = QCheckBox("Enable Backward LP")
         self.enable_recon.stateChanged.connect(self.on_param_changed)
         checkbox_layout.addWidget(self.enable_recon)
         
-        self.sync_recon_checkbox = QCheckBox("Sync with Truncation")
+        self.sync_recon_checkbox = QCheckBox("Sync with Truncation Start")
         self.sync_recon_checkbox.toggled.connect(self.on_sync_recon_toggled)
         checkbox_layout.addWidget(self.sync_recon_checkbox)
         checkbox_layout.addStretch()
@@ -1614,7 +1614,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         recon_layout.addLayout(checkbox_layout, 0, 0, 1, 3)
         
         # Row 1: Points
-        points_label = QLabel("Recon Points:")
+        points_label = QLabel("Backward Points:")
         points_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
         recon_layout.addWidget(points_label, 1, 0)
         
