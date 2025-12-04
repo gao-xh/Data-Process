@@ -229,12 +229,14 @@ class ProcessingWorker(QThread):
             
         # Step 1.5: Backward Linear Prediction
         # Now we reconstruct based on the "good" data after truncation
+        n_backward_actual = 0
         if self.params.get('enable_recon', False):
             self.progress.emit("Applying Backward LP...")
             n_backward = int(self.params.get('recon_points', 0))
             order = int(self.params.get('recon_order', 10))
             if n_backward > 0:
                 svd_corrected = backward_linear_prediction(svd_corrected, n_backward, order)
+                n_backward_actual = n_backward
         
         # Apply end truncation
         if trunc_end > 0:
@@ -263,6 +265,7 @@ class ProcessingWorker(QThread):
         # Step 5: Zero filling
         if not self._running: return None
         zf_factor = self.params['zf_factor']
+        original_len = len(svd_corrected)
         if zf_factor > 0:
             zf_length = int(len(svd_corrected) * zf_factor)
             svd_corrected = np.concatenate((
@@ -322,7 +325,9 @@ class ProcessingWorker(QThread):
             'spectrum_complex': spectrum_complex,
             'acq_time_effective': acq_time * (1 + zf_factor),
             'baseline': smooth_svd,
-            'freq_baseline': freq_baseline
+            'freq_baseline': freq_baseline,
+            'n_backward': n_backward_actual,
+            'original_len': original_len
         }
 
 
@@ -2853,12 +2858,42 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Time domain
         time_axis = np.linspace(0, acq_time, len(time_data))
         self.time_canvas.axes.clear()
-        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8, alpha=0.8, label='Data A')
+        
+        # Plot main signal
+        self.time_canvas.axes.plot(time_axis, np.real(time_data), 'b-', linewidth=0.8, alpha=0.8, label='Processed Signal')
+        
+        # Highlight Backward LP region
+        n_backward = self.processed.get('n_backward', 0)
+        if n_backward > 0:
+            # Ensure we don't go out of bounds
+            n_backward = min(n_backward, len(time_axis))
+            self.time_canvas.axes.plot(
+                time_axis[:n_backward], 
+                np.real(time_data[:n_backward]), 
+                'r-', 
+                linewidth=1.2, 
+                label='Backward LP'
+            )
+            
+        # Highlight Zero Filled region
+        original_len = self.processed.get('original_len', len(time_data))
+        if original_len < len(time_data):
+            self.time_canvas.axes.plot(
+                time_axis[original_len:], 
+                np.real(time_data[original_len:]), 
+                color='#FF9800', # Orange
+                linestyle='--',
+                linewidth=1.0, 
+                label='Zero Filled'
+            )
+            # Add a vertical line to mark the boundary
+            self.time_canvas.axes.axvline(x=time_axis[original_len], color='gray', linestyle=':', alpha=0.5)
         
         self.time_canvas.axes.set_xlabel('Time (s)', fontsize=10, fontweight='bold')
         self.time_canvas.axes.set_ylabel('Amplitude', fontsize=10, fontweight='bold')
         self.time_canvas.axes.set_title('Time Domain Signal', fontsize=11, fontweight='bold')
         self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
+        self.time_canvas.axes.legend(fontsize=8, loc='upper right')
         self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)
         self.time_canvas.fig.tight_layout()
         self.time_canvas.draw()
