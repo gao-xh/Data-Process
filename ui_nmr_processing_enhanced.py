@@ -1160,11 +1160,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
             }
         """)
         
-        # Tab 1: Filtering
+        # Tab 1: Pre-processing (Savgol, Truncation, Apodization)
         filter_tab = self.create_filter_tab()
-        param_tabs.addTab(filter_tab, "Filtering & Apodization")
+        param_tabs.addTab(filter_tab, "Pre-processing")
         
-        # Tab 2: Transform
+        # Tab 2: Reconstruction & Phase (Dead-time, Phase)
+        recon_tab = self.create_recon_tab()
+        param_tabs.addTab(recon_tab, "Reconstruction & Phase")
+        
+        # Tab 3: Transform & Display (Zero Filling, Display Mode)
         transform_tab = self.create_transform_tab()
         param_tabs.addTab(transform_tab, "Transform & Display")
         
@@ -1747,8 +1751,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout.addStretch()
         return tab
     
-    def create_transform_tab(self):
-        """Create transform tab"""
+    def create_recon_tab(self):
+        """Create reconstruction and phase correction tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
@@ -1897,6 +1901,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         phase_group.setLayout(phase_layout)
         layout.addWidget(phase_group)
+        
+        layout.addStretch()
+        return tab
+
+    def create_transform_tab(self):
+        """Create transform and display tab"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # --- NEW: Display Mode ---
         display_group = QGroupBox("Spectrum View Mode")
