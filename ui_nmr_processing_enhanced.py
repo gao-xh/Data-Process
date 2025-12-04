@@ -1233,19 +1233,74 @@ class EnhancedNMRProcessingUI(QMainWindow):
             }
         """)
         
-        # Tab 1: Pre-processing (Savgol, Truncation, Apodization)
-        filter_tab = self.create_filter_tab()
-        param_tabs.addTab(filter_tab, "Pre-processing")
+        # Tab 1: Time Domain Processing
+        time_tab = self.create_time_tab()
+        param_tabs.addTab(time_tab, "Time Domain Processing")
         
-        # Tab 2: Reconstruction & Phase (Dead-time, Phase)
-        recon_tab = self.create_recon_tab()
-        param_tabs.addTab(recon_tab, "Backward LP and Phase")
-        
-        # Tab 3: Transform & Display (Zero Filling, Display Mode)
-        transform_tab = self.create_transform_tab()
-        param_tabs.addTab(transform_tab, "Transform and Display")
+        # Tab 2: Frequency Domain Processing
+        freq_tab = self.create_freq_tab()
+        param_tabs.addTab(freq_tab, "Frequency Domain Processing")
         
         layout.addWidget(param_tabs)
+        
+        # Visualization Settings (Global)
+        view_group = QGroupBox("Visualization Settings")
+        view_group.setStyleSheet(self.get_groupbox_style("#00897b"))
+        view_layout = QVBoxLayout()
+        
+        # Display Mode
+        display_layout = QHBoxLayout()
+        self.view_real = QRadioButton("Real")
+        self.view_real.setChecked(True)
+        self.view_real.toggled.connect(self.update_plot_view)
+        display_layout.addWidget(self.view_real)
+        
+        self.view_imag = QRadioButton("Imag")
+        self.view_imag.toggled.connect(self.update_plot_view)
+        display_layout.addWidget(self.view_imag)
+        
+        self.view_mag = QRadioButton("Mag")
+        self.view_mag.toggled.connect(self.update_plot_view)
+        display_layout.addWidget(self.view_mag)
+        
+        self.show_absolute = QCheckBox("Abs")
+        self.show_absolute.setStyleSheet("font-weight: bold; color: #d32f2f;")
+        self.show_absolute.stateChanged.connect(self.update_plot_view)
+        display_layout.addWidget(self.show_absolute)
+        
+        view_layout.addLayout(display_layout)
+        
+        # Frequency Range
+        range_layout = QGridLayout()
+        range_layout.setSpacing(5)
+        
+        range_layout.addWidget(QLabel("Low Freq View (Hz):"), 0, 0)
+        self.freq_low_min = QDoubleSpinBox()
+        self.freq_low_min.setRange(0, 1000)
+        self.freq_low_min.setValue(0)
+        range_layout.addWidget(self.freq_low_min, 0, 1)
+        self.freq_low_max = QDoubleSpinBox()
+        self.freq_low_max.setRange(0, 1000)
+        self.freq_low_max.setValue(30)
+        range_layout.addWidget(self.freq_low_max, 0, 2)
+        
+        range_layout.addWidget(QLabel("High Freq View (Hz):"), 1, 0)
+        self.freq_high_min = QDoubleSpinBox()
+        self.freq_high_min.setRange(0, 1000)
+        self.freq_high_min.setValue(100)
+        range_layout.addWidget(self.freq_high_min, 1, 1)
+        self.freq_high_max = QDoubleSpinBox()
+        self.freq_high_max.setRange(0, 1000)
+        self.freq_high_max.setValue(275)
+        range_layout.addWidget(self.freq_high_max, 1, 2)
+        
+        apply_range_btn = QPushButton("Update View Range")
+        apply_range_btn.clicked.connect(self.plot_results)
+        range_layout.addWidget(apply_range_btn, 2, 0, 1, 3)
+        
+        view_layout.addLayout(range_layout)
+        view_group.setLayout(view_layout)
+        layout.addWidget(view_group)
         
         # Process button
         self.process_btn = QPushButton("Process Data")
@@ -1448,15 +1503,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         return panel
     
-    def create_filter_tab(self):
-        """Create filtering tab"""
+    def create_time_tab(self):
+        """Create time domain processing tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Savgol filter
-        savgol_group = QGroupBox("Savitzky-Golay Filter (Baseline Removal)")
+        # 1. Savgol filter
+        savgol_group = QGroupBox("Signal Filtering (Savitzky-Golay)")
         savgol_group.setStyleSheet(self.get_groupbox_style("#1976d2"))
         savgol_layout = QGridLayout()
         savgol_layout.setSpacing(10)
@@ -1502,7 +1557,71 @@ class EnhancedNMRProcessingUI(QMainWindow):
         savgol_group.setLayout(savgol_layout)
         layout.addWidget(savgol_group)
         
-        # Time Domain Operations (Truncation & Apodization)
+        # 2. Backward Linear Prediction (Moved from old Tab 2)
+        recon_group = QGroupBox("Signal Recovery (Backward LP)")
+        recon_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))
+        recon_layout = QGridLayout()
+        recon_layout.setSpacing(10)
+        recon_layout.setContentsMargins(12, 15, 12, 12)
+        
+        # Row 0: Checkboxes
+        checkbox_layout = QHBoxLayout()
+        self.enable_recon = QCheckBox("Enable Backward LP")
+        self.enable_recon.stateChanged.connect(self.on_param_changed)
+        checkbox_layout.addWidget(self.enable_recon)
+        
+        self.sync_recon_checkbox = QCheckBox("Sync with Truncation Start")
+        self.sync_recon_checkbox.toggled.connect(self.on_sync_recon_toggled)
+        checkbox_layout.addWidget(self.sync_recon_checkbox)
+        checkbox_layout.addStretch()
+        
+        recon_layout.addLayout(checkbox_layout, 0, 0, 1, 3)
+        
+        # Row 1: Points
+        points_label = QLabel("Backward Points:")
+        points_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        recon_layout.addWidget(points_label, 1, 0)
+        
+        self.recon_slider = QSlider(Qt.Horizontal)
+        self.recon_slider.setRange(0, 3000)
+        self.recon_slider.setValue(0)
+        self.recon_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
+        self.recon_slider.valueChanged.connect(self.on_recon_slider_changed)
+        recon_layout.addWidget(self.recon_slider, 1, 1)
+
+        self.recon_points = QSpinBox()
+        self.recon_points.setRange(0, 3000)
+        self.recon_points.setValue(0)
+        self.recon_points.setMinimumWidth(80)
+        self.recon_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
+        self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
+        recon_layout.addWidget(self.recon_points, 1, 2)
+        
+        # Row 2: Order
+        order_label = QLabel("LP Order:")
+        order_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        recon_layout.addWidget(order_label, 2, 0)
+        
+        self.recon_order_slider = QSlider(Qt.Horizontal)
+        self.recon_order_slider.setRange(1, 512)
+        self.recon_order_slider.setValue(64)
+        self.recon_order_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
+        self.recon_order_slider.valueChanged.connect(self.on_recon_order_slider_changed)
+        recon_layout.addWidget(self.recon_order_slider, 2, 1)
+
+        self.recon_order = QSpinBox()
+        self.recon_order.setRange(1, 512)
+        self.recon_order.setValue(64)
+        self.recon_order.setMinimumWidth(80)
+        self.recon_order.setToolTip("Linear Prediction Order (Number of coefficients)")
+        self.recon_order.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
+        self.recon_order.valueChanged.connect(self.on_recon_order_spinbox_changed)
+        recon_layout.addWidget(self.recon_order, 2, 2)
+        
+        recon_group.setLayout(recon_layout)
+        layout.addWidget(recon_group)
+        
+        # 3. Time Domain Operations (Truncation & Apodization)
         time_group = QGroupBox("Time Domain Operations")
         time_group.setStyleSheet(self.get_groupbox_style("#43a047"))
         time_layout = QGridLayout()
@@ -1619,130 +1738,31 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout.addStretch()
         return tab
     
-    def create_recon_tab(self):
-        """Create reconstruction and phase correction tab"""
+    def create_freq_tab(self):
+        """Create frequency domain processing tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # --- NEW: Backward Linear Prediction ---
-        recon_group = QGroupBox("Backward Linear Prediction (LP)")
-        recon_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))
-        recon_layout = QGridLayout()
-        recon_layout.setSpacing(10)
-        recon_layout.setContentsMargins(12, 15, 12, 12)
+        # 1. Transformation Settings (Zero Filling + FFT)
+        trans_group = QGroupBox("Transformation Settings")
+        trans_group.setStyleSheet(self.get_groupbox_style("#5e35b1"))
+        trans_layout = QGridLayout()
+        trans_layout.setSpacing(10)
+        trans_layout.setContentsMargins(12, 15, 12, 12)
         
-        # Row 0: Checkboxes
-        checkbox_layout = QHBoxLayout()
-        self.enable_recon = QCheckBox("Enable Backward LP")
-        self.enable_recon.stateChanged.connect(self.on_param_changed)
-        checkbox_layout.addWidget(self.enable_recon)
-        
-        self.sync_recon_checkbox = QCheckBox("Sync with Truncation Start")
-        self.sync_recon_checkbox.toggled.connect(self.on_sync_recon_toggled)
-        checkbox_layout.addWidget(self.sync_recon_checkbox)
-        checkbox_layout.addStretch()
-        
-        recon_layout.addLayout(checkbox_layout, 0, 0, 1, 3)
-        
-        # Row 1: Points
-        points_label = QLabel("Backward Points:")
-        points_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        recon_layout.addWidget(points_label, 1, 0)
-        
-        self.recon_slider = QSlider(Qt.Horizontal)
-        self.recon_slider.setRange(0, 3000)
-        self.recon_slider.setValue(0)
-        self.recon_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
-        self.recon_slider.valueChanged.connect(self.on_recon_slider_changed)
-        recon_layout.addWidget(self.recon_slider, 1, 1)
-
-        self.recon_points = QSpinBox()
-        self.recon_points.setRange(0, 3000)
-        self.recon_points.setValue(0)
-        self.recon_points.setMinimumWidth(80)
-        self.recon_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
-        self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
-        recon_layout.addWidget(self.recon_points, 1, 2)
-        
-        # Row 2: Order
-        order_label = QLabel("LP Order:")
-        order_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        recon_layout.addWidget(order_label, 2, 0)
-        
-        self.recon_order_slider = QSlider(Qt.Horizontal)
-        self.recon_order_slider.setRange(1, 512)
-        self.recon_order_slider.setValue(64)
-        self.recon_order_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
-        self.recon_order_slider.valueChanged.connect(self.on_recon_order_slider_changed)
-        recon_layout.addWidget(self.recon_order_slider, 2, 1)
-
-        self.recon_order = QSpinBox()
-        self.recon_order.setRange(1, 512)
-        self.recon_order.setValue(64)
-        self.recon_order.setMinimumWidth(80)
-        self.recon_order.setToolTip("Linear Prediction Order (Number of coefficients)")
-        self.recon_order.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
-        self.recon_order.valueChanged.connect(self.on_recon_order_spinbox_changed)
-        recon_layout.addWidget(self.recon_order, 2, 2)
-        
-        recon_group.setLayout(recon_layout)
-        layout.addWidget(recon_group)
-        
-        layout.addStretch()
-        return tab
-
-    def create_transform_tab(self):
-        """Create transform and display tab"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(12)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # --- NEW: Display Mode ---
-        display_group = QGroupBox("Spectrum View Mode")
-        display_layout = QHBoxLayout()
-        
-        self.view_real = QRadioButton("Real (Absorption)")
-        self.view_real.setChecked(True)
-        self.view_real.toggled.connect(self.update_plot_view)
-        display_layout.addWidget(self.view_real)
-        
-        self.view_imag = QRadioButton("Imaginary (Dispersion)")
-        self.view_imag.toggled.connect(self.update_plot_view)
-        display_layout.addWidget(self.view_imag)
-        
-        self.view_mag = QRadioButton("Magnitude")
-        self.view_mag.toggled.connect(self.update_plot_view)
-        display_layout.addWidget(self.view_mag)
-        
-        # Absolute value checkbox
-        self.show_absolute = QCheckBox("Absolute Value")
-        self.show_absolute.setStyleSheet("font-weight: bold; color: #d32f2f;")
-        self.show_absolute.stateChanged.connect(self.update_plot_view)
-        display_layout.addWidget(self.show_absolute)
-        
-        display_group.setLayout(display_layout)
-        layout.addWidget(display_group)
-        
-        # Zero filling
-        zf_group = QGroupBox("Zero Filling")
-        zf_group.setStyleSheet(self.get_groupbox_style("#5e35b1"))
-        zf_layout = QGridLayout()
-        zf_layout.setSpacing(10)
-        zf_layout.setContentsMargins(12, 15, 12, 12)
-        
+        # Zero Filling
         row = 0
         zf_title = QLabel("Zero Fill Factor:")
         zf_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        zf_layout.addWidget(zf_title, row, 0)
+        trans_layout.addWidget(zf_title, row, 0)
         self.zf_slider = QSlider(Qt.Horizontal)
         self.zf_slider.setRange(0, 1000)
         self.zf_slider.setValue(0)
         self.zf_slider.setStyleSheet(self.get_slider_style("#7d6b9d", "#685983"))
         self.zf_slider.valueChanged.connect(self.on_zf_changed)
-        zf_layout.addWidget(self.zf_slider, row, 1)
+        trans_layout.addWidget(self.zf_slider, row, 1)
         self.zf_spinbox = QDoubleSpinBox()
         self.zf_spinbox.setRange(0.00, 10.00)
         self.zf_spinbox.setValue(0.00)
@@ -1751,30 +1771,27 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.zf_spinbox.setMinimumWidth(80)
         self.zf_spinbox.setStyleSheet(self.get_spinbox_style("#7d6b9d", "#685983", "#544769"))
         self.zf_spinbox.valueChanged.connect(self.on_zf_spinbox_changed)
-        zf_layout.addWidget(self.zf_spinbox, row, 2)
+        trans_layout.addWidget(self.zf_spinbox, row, 2)
         row += 1
         
         zf_hint = QLabel("0 = No filling, 2.7 = 2.7x data length")
         zf_hint.setStyleSheet("font-size: 9px; color: #757575; font-style: italic;")
-        zf_layout.addWidget(zf_hint, row, 0, 1, 3)
+        trans_layout.addWidget(zf_hint, row, 0, 1, 3)
+        row += 1
         
-        zf_group.setLayout(zf_layout)
-        layout.addWidget(zf_group)
+        # FFT Info
+        fft_info = QLabel("FFT is automatically applied after time domain processing.")
+        fft_info.setStyleSheet("color: #757575; font-size: 10px; margin-top: 5px;")
+        trans_layout.addWidget(fft_info, row, 0, 1, 3)
         
-        # FFT info
-        fft_group = QGroupBox("Fourier Transform (FFT)")
-        fft_group.setStyleSheet(self.get_groupbox_style("#424242"))
-        fft_layout = QVBoxLayout()
-        fft_layout.setContentsMargins(12, 10, 12, 12)
-        fft_info = QLabel("FFT is automatically applied after all processing steps.\n"
-                         "The spectrum is computed using scipy.fft.fft().")
-        fft_info.setWordWrap(True)
-        fft_info.setStyleSheet("color: #757575; font-size: 10px;")
-        fft_layout.addWidget(fft_info)
-        fft_group.setLayout(fft_layout)
-        layout.addWidget(fft_group)
+        trans_group.setLayout(trans_layout)
+        layout.addWidget(trans_group)
         
-        # --- Phase Correction ---
+        # 2. Spectral Correction (Phase + Baseline)
+        # We'll put them in a horizontal splitter or just vertical layout
+        # Vertical is safer for width
+        
+        # Phase Correction
         phase_group = QGroupBox("Phase Correction")
         phase_group.setStyleSheet(self.get_groupbox_style("#1976d2"))
         phase_layout = QGridLayout()
@@ -1817,7 +1834,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         phase_group.setLayout(phase_layout)
         layout.addWidget(phase_group)
 
-        # --- Baseline Correction ---
+        # Baseline Correction
         baseline_group = QGroupBox("Baseline Correction")
         baseline_group.setStyleSheet(self.get_groupbox_style("#fbc02d"))
         baseline_layout = QGridLayout()
@@ -1829,7 +1846,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         baseline_layout.addWidget(self.baseline_method, 0, 1, 1, 2)
         
         # Polynomial Order
-        self.lbl_poly = QLabel("Poly Order:")
+        self.lbl_poly = QLabel("Fitting Order:")
         baseline_layout.addWidget(self.lbl_poly, 1, 0)
         self.baseline_poly_order = QSpinBox()
         self.baseline_poly_order.setRange(0, 10)
@@ -1854,72 +1871,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         baseline_group.setLayout(baseline_layout)
         layout.addWidget(baseline_group)
         
-        # Frequency range controls
-        freq_group = QGroupBox("Frequency Display Range")
-        freq_group.setStyleSheet(self.get_groupbox_style("#00897b"))
-        freq_layout = QGridLayout()
-        freq_layout.setSpacing(10)
-        freq_layout.setContentsMargins(12, 15, 12, 12)
-        
-        low_freq_title = QLabel("Low Frequency View:")
-        low_freq_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        freq_layout.addWidget(low_freq_title, 0, 0)
-        self.freq_low_min = QDoubleSpinBox()
-        self.freq_low_min.setRange(0, 1000)
-        self.freq_low_min.setValue(0)
-        self.freq_low_min.setSuffix(" Hz")
-        self.freq_low_min.setStyleSheet("font-size: 10px; padding: 4px;")
-        freq_layout.addWidget(self.freq_low_min, 0, 1)
-        self.freq_low_max = QDoubleSpinBox()
-        self.freq_low_max.setRange(0, 1000)
-        self.freq_low_max.setValue(30)
-        self.freq_low_max.setSuffix(" Hz")
-        self.freq_low_max.setStyleSheet("font-size: 10px; padding: 4px;")
-        freq_layout.addWidget(self.freq_low_max, 0, 2)
-
-
-
-        high_freq_title = QLabel("High Frequency View:")
-        high_freq_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        freq_layout.addWidget(high_freq_title, 1, 0)
-        self.freq_high_min = QDoubleSpinBox()
-        self.freq_high_min.setRange(0, 1000)
-        self.freq_high_min.setValue(100)
-        self.freq_high_min.setSuffix(" Hz")
-        self.freq_high_min.setStyleSheet("font-size: 10px; padding: 4px;")
-        freq_layout.addWidget(self.freq_high_min, 1, 1)
-        self.freq_high_max = QDoubleSpinBox()
-        self.freq_high_max.setRange(0, 1000)
-        self.freq_high_max.setValue(275)
-        self.freq_high_max.setSuffix(" Hz")
-        self.freq_high_max.setStyleSheet("font-size: 10px; padding: 4px;")
-        freq_layout.addWidget(self.freq_high_max, 1, 2)
-        
-        apply_range_btn = QPushButton("Update View")
-        apply_range_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #00897b;
-                color: white;
-                padding: 8px;
-                font-weight: bold;
-                font-size: 10px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #00796b;
-            }
-            QPushButton:pressed {
-                background-color: #00695c;
-            }
-        """)
-        apply_range_btn.clicked.connect(self.plot_results)
-        freq_layout.addWidget(apply_range_btn, 2, 0, 1, 3)
-        
-        freq_group.setLayout(freq_layout)
-        layout.addWidget(freq_group)
-        
-        # SNR Calculation Settings
+        # 3. SNR Calculation Settings
         snr_group = QGroupBox("SNR Calculation Range")
         snr_group.setStyleSheet("""
             QGroupBox {
