@@ -681,23 +681,6 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Title
-        title = QLabel("NMR Data Processing")
-        title.setStyleSheet("""
-            QLabel {
-                font-size: 16px;
-                font-weight: bold;
-                color: #1a237e;
-                padding: 12px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #e3f2fd, stop:1 #bbdefb);
-                border-radius: 6px;
-                border: 1px solid #90caf9;
-            }
-        """)
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
-        
         # Data loading
         data_group = QGroupBox("Data Loading")
         data_group.setStyleSheet(self.get_groupbox_style("#424242"))
