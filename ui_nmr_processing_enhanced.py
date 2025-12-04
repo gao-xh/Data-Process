@@ -1477,70 +1477,78 @@ class EnhancedNMRProcessingUI(QMainWindow):
         savgol_group.setLayout(savgol_layout)
         layout.addWidget(savgol_group)
         
-        # Truncation
-        trunc_group = QGroupBox("Time Domain Truncation")
-        trunc_group.setStyleSheet(self.get_groupbox_style("#43a047"))
-        trunc_layout = QGridLayout()
-        trunc_layout.setSpacing(10)
-        trunc_layout.setContentsMargins(12, 15, 12, 12)
+        # Time Domain Operations (Truncation & Apodization)
+        time_group = QGroupBox("Time Domain Operations")
+        time_group.setStyleSheet(self.get_groupbox_style("#43a047"))
+        time_layout = QGridLayout()
+        time_layout.setSpacing(10)
+        time_layout.setContentsMargins(12, 15, 12, 12)
         
+        # Truncation Section
         row = 0
+        trunc_header = QLabel("Truncation")
+        trunc_header.setStyleSheet("font-size: 10px; font-weight: bold; color: #2e7d32; text-decoration: underline;")
+        time_layout.addWidget(trunc_header, row, 0, 1, 3)
+        row += 1
+
         trunc_start_title = QLabel("Start Points:")
         trunc_start_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        trunc_layout.addWidget(trunc_start_title, row, 0)
+        time_layout.addWidget(trunc_start_title, row, 0)
         self.trunc_start_slider = QSlider(Qt.Horizontal)
         self.trunc_start_slider.setRange(0, 3000)
         self.trunc_start_slider.setValue(10)
         self.trunc_start_slider.setStyleSheet(self.get_slider_style("#6b9b7c", "#568266"))
         self.trunc_start_slider.valueChanged.connect(self.on_trunc_start_changed)
-        trunc_layout.addWidget(self.trunc_start_slider, row, 1)
+        time_layout.addWidget(self.trunc_start_slider, row, 1)
         self.trunc_start_spinbox = QSpinBox()
         self.trunc_start_spinbox.setRange(0, 3000)
         self.trunc_start_spinbox.setValue(10)
         self.trunc_start_spinbox.setMinimumWidth(80)
         self.trunc_start_spinbox.setStyleSheet(self.get_spinbox_style("#6b9b7c", "#568266", "#446952"))
         self.trunc_start_spinbox.valueChanged.connect(self.on_trunc_start_spinbox_changed)
-        trunc_layout.addWidget(self.trunc_start_spinbox, row, 2)
+        time_layout.addWidget(self.trunc_start_spinbox, row, 2)
         row += 1
         
         trunc_end_title = QLabel("End Points:")
         trunc_end_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        trunc_layout.addWidget(trunc_end_title, row, 0)
+        time_layout.addWidget(trunc_end_title, row, 0)
         self.trunc_end_slider = QSlider(Qt.Horizontal)
         self.trunc_end_slider.setRange(0, 60000)
         self.trunc_end_slider.setValue(10)
         self.trunc_end_slider.setStyleSheet(self.get_slider_style("#6b9b7c", "#568266"))
         self.trunc_end_slider.valueChanged.connect(self.on_trunc_end_changed)
-        trunc_layout.addWidget(self.trunc_end_slider, row, 1)
+        time_layout.addWidget(self.trunc_end_slider, row, 1)
         self.trunc_end_spinbox = QSpinBox()
         self.trunc_end_spinbox.setRange(0, 60000)
         self.trunc_end_spinbox.setValue(10)
         self.trunc_end_spinbox.setMinimumWidth(80)
         self.trunc_end_spinbox.setStyleSheet(self.get_spinbox_style("#6b9b7c", "#568266", "#446952"))
         self.trunc_end_spinbox.valueChanged.connect(self.on_trunc_end_spinbox_changed)
-        trunc_layout.addWidget(self.trunc_end_spinbox, row, 2)
+        time_layout.addWidget(self.trunc_end_spinbox, row, 2)
         row += 1
         
-        trunc_group.setLayout(trunc_layout)
-        layout.addWidget(trunc_group)
-        
-        # Apodization
-        apod_group = QGroupBox("Apodization (T2* Exponential Decay)")
-        apod_group.setStyleSheet(self.get_groupbox_style("#f57c00"))
-        apod_layout = QGridLayout()
-        apod_layout.setSpacing(10)
-        apod_layout.setContentsMargins(12, 15, 12, 12)
-        
-        row = 0
+        # Separator
+        line = QWidget()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #e0e0e0; margin: 5px 0;")
+        time_layout.addWidget(line, row, 0, 1, 3)
+        row += 1
+
+        # Apodization Section
+        apod_header = QLabel("Apodization")
+        apod_header.setStyleSheet("font-size: 10px; font-weight: bold; color: #ef6c00; text-decoration: underline;")
+        time_layout.addWidget(apod_header, row, 0, 1, 3)
+        row += 1
+
         apod_title = QLabel("T2* Factor:")
         apod_title.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
-        apod_layout.addWidget(apod_title, row, 0)
+        time_layout.addWidget(apod_title, row, 0)
         self.apod_slider = QSlider(Qt.Horizontal)
         self.apod_slider.setRange(-200, 200)
         self.apod_slider.setValue(0)
         self.apod_slider.setStyleSheet(self.get_slider_style("#b8865f", "#9d714d"))
         self.apod_slider.valueChanged.connect(self.on_apod_changed)
-        apod_layout.addWidget(self.apod_slider, row, 1)
+        time_layout.addWidget(self.apod_slider, row, 1)
         self.apod_spinbox = QDoubleSpinBox()
         self.apod_spinbox.setRange(-2.00, 2.00)
         self.apod_spinbox.setValue(0.00)
@@ -1549,12 +1557,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.apod_spinbox.setMinimumWidth(80)
         self.apod_spinbox.setStyleSheet(self.get_spinbox_style("#b8865f", "#9d714d", "#825c3d"))
         self.apod_spinbox.valueChanged.connect(self.on_apod_spinbox_changed)
-        apod_layout.addWidget(self.apod_spinbox, row, 2)
+        time_layout.addWidget(self.apod_spinbox, row, 2)
         row += 1
         
         hanning_title = QLabel("Hanning Window:")
         hanning_title.setStyleSheet("font-size: 9px; font-weight: bold;")
-        apod_layout.addWidget(hanning_title, row, 0)
+        time_layout.addWidget(hanning_title, row, 0)
         self.use_hanning = QCheckBox("Apply Hanning")
         self.use_hanning.setStyleSheet("""
             QCheckBox {
@@ -1577,11 +1585,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             }
         """)
         self.use_hanning.stateChanged.connect(self.on_param_changed)
-        apod_layout.addWidget(self.use_hanning, row, 1)
+        time_layout.addWidget(self.use_hanning, row, 1)
         row += 1
         
-        apod_group.setLayout(apod_layout)
-        layout.addWidget(apod_group)
+        time_group.setLayout(time_layout)
+        layout.addWidget(time_group)
         
         layout.addStretch()
         return tab
