@@ -586,6 +586,69 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         main_layout.addWidget(self.main_splitter)
     
+    def get_slider_style(self, color, hover_color):
+        """Generate CSS for QSlider"""
+        return f"""
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: #e0e0e0;
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {color};
+                width: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: {hover_color};
+            }}
+        """
+
+    def get_spinbox_style(self, color, btn_color, hover_color):
+        """Generate CSS for QSpinBox/QDoubleSpinBox"""
+        return f"""
+            QSpinBox, QDoubleSpinBox {{
+                font-weight: bold;
+                color: white;
+                background-color: {color};
+                padding: 4px 8px;
+                border-radius: 4px;
+                border: none;
+                font-size: 11px;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button,
+            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+                background-color: {btn_color};
+                border: none;
+                width: 16px;
+            }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+            QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
+                background-color: {hover_color};
+            }}
+        """
+
+    def get_groupbox_style(self, title_color):
+        """Generate CSS for QGroupBox"""
+        return f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: 11px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: {title_color};
+            }}
+        """
+
     def create_control_panel(self):
         """Create control panel"""
         panel = QWidget()
@@ -612,22 +675,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Data loading
         data_group = QGroupBox("Data Loading")
-        data_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #424242;
-            }
-        """)
+        data_group.setStyleSheet(self.get_groupbox_style("#424242"))
         data_layout = QVBoxLayout()
         data_layout.setSpacing(8)
         
@@ -1384,23 +1432,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Savgol filter
         savgol_group = QGroupBox("Savitzky-Golay Filter (Baseline Removal)")
-        savgol_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #1976d2;
-            }
-        """)
+        savgol_group.setStyleSheet(self.get_groupbox_style("#1976d2"))
         savgol_layout = QGridLayout()
         savgol_layout.setSpacing(10)
         savgol_layout.setContentsMargins(12, 15, 12, 12)
@@ -1412,47 +1444,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.conv_slider = QSlider(Qt.Horizontal)
         self.conv_slider.setRange(2, 12000)
         self.conv_slider.setValue(300)
-        self.conv_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #5c7a99;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #4a6580;
-            }
-        """)
+        self.conv_slider.setStyleSheet(self.get_slider_style("#5c7a99", "#4a6580"))
         self.conv_slider.valueChanged.connect(self.on_conv_changed)
         savgol_layout.addWidget(self.conv_slider, row, 1)
         self.conv_spinbox = QSpinBox()
         self.conv_spinbox.setRange(2, 12000)
         self.conv_spinbox.setValue(300)
         self.conv_spinbox.setMinimumWidth(80)
-        self.conv_spinbox.setStyleSheet("""
-            QSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #5c7a99;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                background-color: #4a6580;
-                border: none;
-                width: 16px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #3a5166;
-            }
-        """)
+        self.conv_spinbox.setStyleSheet(self.get_spinbox_style("#5c7a99", "#4a6580", "#3a5166"))
         self.conv_spinbox.valueChanged.connect(self.on_conv_spinbox_changed)
         savgol_layout.addWidget(self.conv_spinbox, row, 2)
         row += 1
@@ -1463,47 +1462,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.poly_slider = QSlider(Qt.Horizontal)
         self.poly_slider.setRange(1, 20)
         self.poly_slider.setValue(2)
-        self.poly_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #5c7a99;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #4a6580;
-            }
-        """)
+        self.poly_slider.setStyleSheet(self.get_slider_style("#5c7a99", "#4a6580"))
         self.poly_slider.valueChanged.connect(self.on_poly_changed)
         savgol_layout.addWidget(self.poly_slider, row, 1)
         self.poly_spinbox = QSpinBox()
         self.poly_spinbox.setRange(1, 20)
         self.poly_spinbox.setValue(2)
         self.poly_spinbox.setMinimumWidth(80)
-        self.poly_spinbox.setStyleSheet("""
-            QSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #5c7a99;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                background-color: #4a6580;
-                border: none;
-                width: 16px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #3a5166;
-            }
-        """)
+        self.poly_spinbox.setStyleSheet(self.get_spinbox_style("#5c7a99", "#4a6580", "#3a5166"))
         self.poly_spinbox.valueChanged.connect(self.on_poly_spinbox_changed)
         savgol_layout.addWidget(self.poly_spinbox, row, 2)
         row += 1
@@ -1513,23 +1479,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Truncation
         trunc_group = QGroupBox("Time Domain Truncation")
-        trunc_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #43a047;
-            }
-        """)
+        trunc_group.setStyleSheet(self.get_groupbox_style("#43a047"))
         trunc_layout = QGridLayout()
         trunc_layout.setSpacing(10)
         trunc_layout.setContentsMargins(12, 15, 12, 12)
@@ -1541,47 +1491,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.trunc_start_slider = QSlider(Qt.Horizontal)
         self.trunc_start_slider.setRange(0, 3000)
         self.trunc_start_slider.setValue(10)
-        self.trunc_start_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #6b9b7c;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #568266;
-            }
-        """)
+        self.trunc_start_slider.setStyleSheet(self.get_slider_style("#6b9b7c", "#568266"))
         self.trunc_start_slider.valueChanged.connect(self.on_trunc_start_changed)
         trunc_layout.addWidget(self.trunc_start_slider, row, 1)
         self.trunc_start_spinbox = QSpinBox()
         self.trunc_start_spinbox.setRange(0, 3000)
         self.trunc_start_spinbox.setValue(10)
         self.trunc_start_spinbox.setMinimumWidth(80)
-        self.trunc_start_spinbox.setStyleSheet("""
-            QSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #6b9b7c;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                background-color: #568266;
-                border: none;
-                width: 16px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #446952;
-            }
-        """)
+        self.trunc_start_spinbox.setStyleSheet(self.get_spinbox_style("#6b9b7c", "#568266", "#446952"))
         self.trunc_start_spinbox.valueChanged.connect(self.on_trunc_start_spinbox_changed)
         trunc_layout.addWidget(self.trunc_start_spinbox, row, 2)
         row += 1
@@ -1592,47 +1509,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.trunc_end_slider = QSlider(Qt.Horizontal)
         self.trunc_end_slider.setRange(0, 60000)
         self.trunc_end_slider.setValue(10)
-        self.trunc_end_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #6b9b7c;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #568266;
-            }
-        """)
+        self.trunc_end_slider.setStyleSheet(self.get_slider_style("#6b9b7c", "#568266"))
         self.trunc_end_slider.valueChanged.connect(self.on_trunc_end_changed)
         trunc_layout.addWidget(self.trunc_end_slider, row, 1)
         self.trunc_end_spinbox = QSpinBox()
         self.trunc_end_spinbox.setRange(0, 60000)
         self.trunc_end_spinbox.setValue(10)
         self.trunc_end_spinbox.setMinimumWidth(80)
-        self.trunc_end_spinbox.setStyleSheet("""
-            QSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #6b9b7c;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                background-color: #568266;
-                border: none;
-                width: 16px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #446952;
-            }
-        """)
+        self.trunc_end_spinbox.setStyleSheet(self.get_spinbox_style("#6b9b7c", "#568266", "#446952"))
         self.trunc_end_spinbox.valueChanged.connect(self.on_trunc_end_spinbox_changed)
         trunc_layout.addWidget(self.trunc_end_spinbox, row, 2)
         row += 1
@@ -1642,23 +1526,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Apodization
         apod_group = QGroupBox("Apodization (T2* Exponential Decay)")
-        apod_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #f57c00;
-            }
-        """)
+        apod_group.setStyleSheet(self.get_groupbox_style("#f57c00"))
         apod_layout = QGridLayout()
         apod_layout.setSpacing(10)
         apod_layout.setContentsMargins(12, 15, 12, 12)
@@ -1670,22 +1538,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.apod_slider = QSlider(Qt.Horizontal)
         self.apod_slider.setRange(-200, 200)
         self.apod_slider.setValue(0)
-        self.apod_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #b8865f;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #9d714d;
-            }
-        """)
+        self.apod_slider.setStyleSheet(self.get_slider_style("#b8865f", "#9d714d"))
         self.apod_slider.valueChanged.connect(self.on_apod_changed)
         apod_layout.addWidget(self.apod_slider, row, 1)
         self.apod_spinbox = QDoubleSpinBox()
@@ -1694,25 +1547,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.apod_spinbox.setSingleStep(0.01)
         self.apod_spinbox.setDecimals(2)
         self.apod_spinbox.setMinimumWidth(80)
-        self.apod_spinbox.setStyleSheet("""
-            QDoubleSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #b8865f;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
-                background-color: #9d714d;
-                border: none;
-                width: 16px;
-            }
-            QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {
-                background-color: #825c3d;
-            }
-        """)
+        self.apod_spinbox.setStyleSheet(self.get_spinbox_style("#b8865f", "#9d714d", "#825c3d"))
         self.apod_spinbox.valueChanged.connect(self.on_apod_spinbox_changed)
         apod_layout.addWidget(self.apod_spinbox, row, 2)
         row += 1
@@ -1760,23 +1595,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # --- NEW: Dead-time Reconstruction ---
         recon_group = QGroupBox("Dead-time Reconstruction (Backward LP)")
-        recon_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #d32f2f;
-            }
-        """)
+        recon_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))
         recon_layout = QHBoxLayout()
         
         self.enable_recon = QCheckBox("Enable Reconstruction")
@@ -1792,47 +1611,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_slider = QSlider(Qt.Horizontal)
         self.recon_slider.setRange(0, 3000)
         self.recon_slider.setValue(0)
-        self.recon_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #d32f2f;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #b71c1c;
-            }
-        """)
+        self.recon_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
         self.recon_slider.valueChanged.connect(self.on_recon_slider_changed)
         recon_layout.addWidget(self.recon_slider)
 
         self.recon_points = QSpinBox()
         self.recon_points.setRange(0, 3000)
         self.recon_points.setValue(0)
-        self.recon_points.setStyleSheet("""
-            QSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #d32f2f;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                background-color: #b71c1c;
-                border: none;
-                width: 16px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #9a0007;
-            }
-        """)
+        self.recon_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
         self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
         recon_layout.addWidget(self.recon_points)
         
@@ -1849,23 +1635,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # --- NEW: Phase Correction ---
         phase_group = QGroupBox("Phase Correction")
-        phase_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #1976d2;
-            }
-        """)
+        phase_group.setStyleSheet(self.get_groupbox_style("#1976d2"))
         phase_layout = QGridLayout()
         
         # Phase 0
@@ -1873,11 +1643,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.phase0_slider = QSlider(Qt.Horizontal)
         self.phase0_slider.setRange(-180, 180)
         self.phase0_slider.setValue(0)
+        self.phase0_slider.setStyleSheet(self.get_slider_style("#1976d2", "#1565c0"))
         self.phase0_slider.valueChanged.connect(self.on_phase_changed) # Special handler for fast update
         phase_layout.addWidget(self.phase0_slider, 0, 1)
         self.phase0_spin = QDoubleSpinBox()
         self.phase0_spin.setRange(-180, 180)
         self.phase0_spin.setSingleStep(1)
+        self.phase0_spin.setStyleSheet(self.get_spinbox_style("#1976d2", "#1565c0", "#0d47a1"))
         self.phase0_spin.valueChanged.connect(self.on_phase_spin_changed)
         phase_layout.addWidget(self.phase0_spin, 0, 2)
         
@@ -1886,11 +1658,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.phase1_slider = QSlider(Qt.Horizontal)
         self.phase1_slider.setRange(-10000, 10000)
         self.phase1_slider.setValue(0)
+        self.phase1_slider.setStyleSheet(self.get_slider_style("#1976d2", "#1565c0"))
         self.phase1_slider.valueChanged.connect(self.on_phase_changed)
         phase_layout.addWidget(self.phase1_slider, 1, 1)
         self.phase1_spin = QDoubleSpinBox()
         self.phase1_spin.setRange(-10000, 10000)
         self.phase1_spin.setSingleStep(10)
+        self.phase1_spin.setStyleSheet(self.get_spinbox_style("#1976d2", "#1565c0", "#0d47a1"))
         self.phase1_spin.valueChanged.connect(self.on_phase_spin_changed)
         phase_layout.addWidget(self.phase1_spin, 1, 2)
         
@@ -1940,23 +1714,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Zero filling
         zf_group = QGroupBox("Zero Filling")
-        zf_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #5e35b1;
-            }
-        """)
+        zf_group.setStyleSheet(self.get_groupbox_style("#5e35b1"))
         zf_layout = QGridLayout()
         zf_layout.setSpacing(10)
         zf_layout.setContentsMargins(12, 15, 12, 12)
@@ -1968,22 +1726,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.zf_slider = QSlider(Qt.Horizontal)
         self.zf_slider.setRange(0, 1000)
         self.zf_slider.setValue(0)
-        self.zf_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #e0e0e0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: #7d6b9d;
-                width: 16px;
-                margin: -5px 0;
-                border-radius: 8px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #685983;
-            }
-        """)
+        self.zf_slider.setStyleSheet(self.get_slider_style("#7d6b9d", "#685983"))
         self.zf_slider.valueChanged.connect(self.on_zf_changed)
         zf_layout.addWidget(self.zf_slider, row, 1)
         self.zf_spinbox = QDoubleSpinBox()
@@ -1992,25 +1735,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.zf_spinbox.setSingleStep(0.01)
         self.zf_spinbox.setDecimals(2)
         self.zf_spinbox.setMinimumWidth(80)
-        self.zf_spinbox.setStyleSheet("""
-            QDoubleSpinBox {
-                font-weight: bold;
-                color: white;
-                background-color: #7d6b9d;
-                padding: 4px 8px;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }
-            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
-                background-color: #685983;
-                border: none;
-                width: 16px;
-            }
-            QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {
-                background-color: #544769;
-            }
-        """)
+        self.zf_spinbox.setStyleSheet(self.get_spinbox_style("#7d6b9d", "#685983", "#544769"))
         self.zf_spinbox.valueChanged.connect(self.on_zf_spinbox_changed)
         zf_layout.addWidget(self.zf_spinbox, row, 2)
         row += 1
@@ -2024,23 +1749,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # FFT info
         fft_group = QGroupBox("Fourier Transform (FFT)")
-        fft_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #424242;
-            }
-        """)
+        fft_group.setStyleSheet(self.get_groupbox_style("#424242"))
         fft_layout = QVBoxLayout()
         fft_layout.setContentsMargins(12, 10, 12, 12)
         fft_info = QLabel("FFT is automatically applied after all processing steps.\n"
@@ -2053,23 +1762,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Frequency range controls
         freq_group = QGroupBox("Frequency Display Range")
-        freq_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 11px;
-                border: 2px solid #e0e0e0;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-                color: #00897b;
-            }
-        """)
+        freq_group.setStyleSheet(self.get_groupbox_style("#00897b"))
         freq_layout = QGridLayout()
         freq_layout.setSpacing(10)
         freq_layout.setContentsMargins(12, 15, 12, 12)
