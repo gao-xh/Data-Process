@@ -1214,11 +1214,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Tab 2: Reconstruction & Phase (Dead-time, Phase)
         recon_tab = self.create_recon_tab()
-        param_tabs.addTab(recon_tab, "Backward LP && Phase")
+        param_tabs.addTab(recon_tab, "Backward LP and Phase")
         
         # Tab 3: Transform & Display (Zero Filling, Display Mode)
         transform_tab = self.create_transform_tab()
-        param_tabs.addTab(transform_tab, "Transform && Display")
+        param_tabs.addTab(transform_tab, "Transform and Display")
         
         layout.addWidget(param_tabs)
         
@@ -1337,7 +1337,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         layout.addLayout(btn_layout2)
         
         # Results and Metrics
-        results_group = QGroupBox("Results && Metrics")
+        results_group = QGroupBox("Results and Metrics")
         results_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
