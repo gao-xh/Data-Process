@@ -3313,6 +3313,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
     def update_plot_view(self):
         """Update plot view mode (Real/Imag/Mag)"""
         self.plot_results()
+        self.calculate_metrics()
         
     # --- End NEW Methods ---
 
@@ -3356,6 +3357,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 self.enable_recon.setChecked(bool(params['enable_recon']))
             if 'recon_points' in params:
                 self.recon_points.setValue(int(params['recon_points']))
+            if 'recon_order' in params:
+                self.recon_order.setValue(int(params['recon_order']))
+                
+            # Update Baseline params
+            if 'baseline_method' in params:
+                self.baseline_method.setCurrentText(str(params['baseline_method']))
+            if 'baseline_order' in params:
+                self.baseline_poly_order.setValue(int(params['baseline_order']))
+            if 'baseline_lambda' in params:
+                self.baseline_lambda.setValue(int(params['baseline_lambda']))
             
             self.params = params
             QMessageBox.information(self, "Success", "Parameters loaded successfully.")
@@ -3388,8 +3399,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 'freq_high_max': self.freq_high_max.value(),
                 'enable_recon': self.enable_recon.isChecked(),
                 'recon_points': self.recon_points.value(),
+                'recon_order': self.recon_order.value(),
                 'phase0': self.phase0_spin.value(),
-                'phase1': self.phase1_spin.value()
+                'phase1': self.phase1_spin.value(),
+                'baseline_method': self.baseline_method.currentText(),
+                'baseline_order': self.baseline_poly_order.value(),
+                'baseline_lambda': self.baseline_lambda.value()
             }
             
             with open(file_name, 'w') as f:
@@ -3539,10 +3554,22 @@ class EnhancedNMRProcessingUI(QMainWindow):
         freq_axis = self.processed['freq_axis']
         spectrum = self.processed['spectrum']
         
-        # Use Real part for SNR calculation (sensitive to phase)
-        # If phase is correct, Real part has max signal.
-        # If we use Abs (Magnitude), phase doesn't matter.
-        spectrum_data = np.real(spectrum)
+        # Determine data source based on visualization settings
+        if self.view_real.isChecked():
+            spectrum_data = np.real(spectrum)
+            mode_name = "Real"
+            if self.show_absolute.isChecked():
+                spectrum_data = np.abs(spectrum_data)
+                mode_name = "|Real|"
+        elif self.view_imag.isChecked():
+            spectrum_data = np.imag(spectrum)
+            mode_name = "Imag"
+            if self.show_absolute.isChecked():
+                spectrum_data = np.abs(spectrum_data)
+                mode_name = "|Imag|"
+        else:
+            spectrum_data = np.abs(spectrum)
+            mode_name = "Mag"
         
         # Get SNR ranges from UI
         sig_min = self.signal_range_min.value()
@@ -3555,10 +3582,16 @@ class EnhancedNMRProcessingUI(QMainWindow):
         noise_a = 0
         sig_idx = None
         try:
-            # Signal peak (use absolute value of real part to handle inverted peaks)
+            # Signal peak
             sig_idx = (freq_axis >= sig_min) & (freq_axis <= sig_max)
             if np.any(sig_idx):
-                sig_peak = np.max(np.abs(spectrum_data[sig_idx]))
+                # Use absolute value for peak finding if not already absolute
+                # This ensures we find the peak even if it's negative (e.g. in Real mode)
+                # But if user selected Abs mode, data is already positive.
+                if self.show_absolute.isChecked() or self.view_mag.isChecked():
+                    sig_peak = np.max(spectrum_data[sig_idx])
+                else:
+                    sig_peak = np.max(np.abs(spectrum_data[sig_idx]))
             else:
                 sig_peak = 0
                 
@@ -3575,7 +3608,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             pass
             
         # Update Table
-        self.metrics_table.item(0, 0).setText("SNR (Total)")
+        self.metrics_table.item(0, 0).setText(f"SNR Total ({mode_name})")
         self.metrics_table.item(0, 1).setText(f"{snr_a:.2f}")
         
         if self.scan_count > 0:
@@ -3597,7 +3630,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         if sig_idx is not None and np.any(sig_idx):
             subset_freq = freq_axis[sig_idx]
             subset_spec = spectrum_data[sig_idx]
-            peak_idx = np.argmax(subset_spec)
+            peak_idx = np.argmax(np.abs(subset_spec))
             peak_freq = subset_freq[peak_idx]
             self.metrics_table.item(4, 1).setText(f"{peak_freq:.2f}")
         else:
