@@ -260,7 +260,7 @@ def baseline_correction(
         coeffs = np.polyfit(noise_freq, noise_spec, order)
         baseline = np.polyval(coeffs, freq_axis)
         
-    elif method == 'air_pls':
+    elif method == 'air_pls' or method == 'airpls':
         baseline = air_pls(data_to_fit, lambda_=lambda_)
     
     else:
