@@ -230,11 +230,16 @@ class ProcessingWorker(QThread):
         # Step 1.5: Backward Linear Prediction
         # Now we reconstruct based on the "good" data after truncation
         n_backward_actual = 0
+        lp_train_len = 0
         if self.params.get('enable_recon', False):
             self.progress.emit("Applying Backward LP...")
             n_backward = int(self.params.get('recon_points', 0))
             order = int(self.params.get('recon_order', 10))
             if n_backward > 0:
+                # Calculate training length (logic matches zulf_algorithms.py)
+                valid_len = len(svd_corrected)
+                lp_train_len = min(valid_len, 4 * order)
+                
                 svd_corrected = backward_linear_prediction(svd_corrected, n_backward, order)
                 n_backward_actual = n_backward
         
@@ -327,6 +332,7 @@ class ProcessingWorker(QThread):
             'baseline': smooth_svd,
             'freq_baseline': freq_baseline,
             'n_backward': n_backward_actual,
+            'lp_train_len': lp_train_len,
             'original_len': original_len
         }
 
@@ -2864,6 +2870,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Highlight Backward LP region
         n_backward = self.processed.get('n_backward', 0)
+        lp_train_len = self.processed.get('lp_train_len', 0)
+        
         if n_backward > 0:
             # Ensure we don't go out of bounds
             n_backward = min(n_backward, len(time_axis))
@@ -2874,6 +2882,23 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 linewidth=1.2, 
                 label='Backward LP'
             )
+            
+            # Highlight Training Region
+            if lp_train_len > 0:
+                # Start index: n_backward
+                # End index: n_backward + lp_train_len
+                idx_start = n_backward
+                idx_end = min(n_backward + lp_train_len, len(time_axis)-1)
+                
+                if idx_end > idx_start:
+                    t_start = time_axis[idx_start]
+                    t_end = time_axis[idx_end]
+                    self.time_canvas.axes.axvspan(
+                        t_start, t_end, 
+                        color='#4CAF50', # Green
+                        alpha=0.15, 
+                        label='LP Training Region'
+                    )
             
         # Highlight Zero Filled region
         original_len = self.processed.get('original_len', len(time_data))
@@ -3265,6 +3290,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Re-plot
         self.plot_results()
         
+        # Recalculate metrics (SNR depends on phase if using Real part)
+        self.calculate_metrics()
+        
     def run_auto_phase(self):
         """Run auto-phasing algorithm"""
         if self.processed is None or 'spectrum_complex' not in self.processed:
@@ -3510,8 +3538,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
             
         freq_axis = self.processed['freq_axis']
         spectrum = self.processed['spectrum']
-        # Use magnitude for SNR calculation usually
-        spectrum_abs = np.abs(spectrum)
+        
+        # Use Real part for SNR calculation (sensitive to phase)
+        # If phase is correct, Real part has max signal.
+        # If we use Abs (Magnitude), phase doesn't matter.
+        spectrum_data = np.real(spectrum)
         
         # Get SNR ranges from UI
         sig_min = self.signal_range_min.value()
@@ -3524,17 +3555,17 @@ class EnhancedNMRProcessingUI(QMainWindow):
         noise_a = 0
         sig_idx = None
         try:
-            # Signal peak
+            # Signal peak (use absolute value of real part to handle inverted peaks)
             sig_idx = (freq_axis >= sig_min) & (freq_axis <= sig_max)
             if np.any(sig_idx):
-                sig_peak = np.max(spectrum_abs[sig_idx])
+                sig_peak = np.max(np.abs(spectrum_data[sig_idx]))
             else:
                 sig_peak = 0
                 
             # Noise std
             noise_idx = (freq_axis >= noise_min) & (freq_axis <= noise_max)
             if np.any(noise_idx):
-                noise_a = np.std(spectrum_abs[noise_idx])
+                noise_a = np.std(spectrum_data[noise_idx])
             else:
                 noise_a = 1.0 # Avoid div by zero
                 
@@ -3565,7 +3596,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Find peak freq
         if sig_idx is not None and np.any(sig_idx):
             subset_freq = freq_axis[sig_idx]
-            subset_spec = spectrum_abs[sig_idx]
+            subset_spec = spectrum_data[sig_idx]
             peak_idx = np.argmax(subset_spec)
             peak_freq = subset_freq[peak_idx]
             self.metrics_table.item(4, 1).setText(f"{peak_freq:.2f}")
