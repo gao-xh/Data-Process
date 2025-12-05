@@ -1262,6 +1262,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.show_absolute.stateChanged.connect(self.update_plot_view)
         display_layout.addWidget(self.show_absolute)
         
+        self.show_baseline = QCheckBox("Show Baseline")
+        self.show_baseline.setStyleSheet("font-weight: bold; color: #795548;")
+        self.show_baseline.stateChanged.connect(self.update_plot_view)
+        display_layout.addWidget(self.show_baseline)
+        
         view_layout.addLayout(display_layout)
         
         # Frequency Range
@@ -1588,6 +1593,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_points.setValue(0)
         self.recon_points.setMinimumWidth(80)
         self.recon_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
+        self.recon_points.setToolTip("Number of points to predict backwards.\nExtends the FID to recover lost initial points (dead time).")
         self.recon_points.valueChanged.connect(self.on_recon_spinbox_changed)
         recon_layout.addWidget(self.recon_points, 1, 2)
         
@@ -1597,6 +1603,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         recon_layout.addWidget(order_label, 2, 0)
         
         self.recon_order_slider = QSlider(Qt.Horizontal)
+        self.recon_order_slider.setToolTip("Order of the Linear Prediction model.\nHigher order = models more peaks, but less stable.")
         self.recon_order_slider.setRange(1, 512)
         self.recon_order_slider.setValue(64)
         self.recon_order_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
@@ -1855,6 +1862,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.baseline_lambda.setRange(10, 100000)
         self.baseline_lambda.setValue(100)
         self.baseline_lambda.setSingleStep(100)
+        self.baseline_lambda.setToolTip("Smoothness parameter for AirPLS.\nLarger value = smoother/stiffer baseline (10^4 - 10^5).\nSmaller value = more flexible baseline (10 - 100).")
         self.baseline_lambda.valueChanged.connect(self.on_param_changed)
         baseline_layout.addWidget(self.baseline_lambda, 2, 1, 1, 2)
         
@@ -2929,6 +2937,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq1_canvas.axes.clear()
         self.freq1_canvas.axes.plot(freq_axis, plot_data, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
         
+        # Plot Baseline if requested
+        freq_baseline = self.processed.get('freq_baseline', None)
+        if self.show_baseline.isChecked() and freq_baseline is not None and self.view_real.isChecked():
+            self.freq1_canvas.axes.plot(freq_axis, freq_baseline, 'g--', linewidth=1.0, alpha=0.7, label='Baseline')
+        
         self.freq1_canvas.axes.set_xlim(freq_range_low[0], freq_range_low[1])
         idx_visible = (freq_axis >= freq_range_low[0]) & (freq_axis <= freq_range_low[1])
         if np.any(idx_visible):
@@ -2951,6 +2964,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         self.freq2_canvas.axes.clear()
         self.freq2_canvas.axes.plot(freq_axis, plot_data, 'b-', linewidth=1.0, alpha=0.8, label='Data A')
+        
+        # Plot Baseline if requested
+        if self.show_baseline.isChecked() and freq_baseline is not None and self.view_real.isChecked():
+            self.freq2_canvas.axes.plot(freq_axis, freq_baseline, 'g--', linewidth=1.0, alpha=0.7, label='Baseline')
         
         self.freq2_canvas.axes.set_xlim(freq_range_high[0], freq_range_high[1])
         idx_visible = (freq_axis >= freq_range_high[0]) & (freq_axis <= freq_range_high[1])
