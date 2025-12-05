@@ -1156,8 +1156,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.apply_scan_btn.setEnabled(False)
         self.apply_scan_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2196F3;
-                color: white;
+                background-color: #90caf9;
+                color: #0d47a1;
                 border: none;
                 border-radius: 4px;
                 padding: 8px 20px;
@@ -1165,13 +1165,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 font-size: 10px;
             }
             QPushButton:hover {
-                background-color: #1976D2;
+                background-color: #64b5f6;
             }
             QPushButton:pressed {
-                background-color: #0D47A1;
+                background-color: #42a5f5;
             }
             QPushButton:disabled {
-                background-color: #BDBDBD;
+                background-color: #e0e0e0;
+                color: #9e9e9e;
             }
         """)
         self.apply_scan_btn.clicked.connect(self.reload_selected_scans)
@@ -1294,6 +1295,23 @@ class EnhancedNMRProcessingUI(QMainWindow):
         range_layout.addWidget(self.freq_high_max, 1, 2)
         
         apply_range_btn = QPushButton("Update View Range")
+        apply_range_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #80cbc4;
+                color: #004d40;
+                padding: 6px;
+                font-weight: bold;
+                font-size: 10px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #4db6ac;
+            }
+            QPushButton:pressed {
+                background-color: #26a69a;
+            }
+        """)
         apply_range_btn.clicked.connect(self.plot_results)
         range_layout.addWidget(apply_range_btn, 2, 0, 1, 3)
         
@@ -1307,8 +1325,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.process_btn.setEnabled(False)
         self.process_btn.setStyleSheet("""
             QPushButton {
-                background-color: #6b9b7c;
-                color: white;
+                background-color: #a5d6a7;
+                color: #1b5e20;
                 font-size: 13px;
                 font-weight: bold;
                 padding: 14px;
@@ -1316,14 +1334,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 border-radius: 6px;
             }
             QPushButton:hover {
-                background-color: #568266;
+                background-color: #81c784;
             }
             QPushButton:pressed {
-                background-color: #446952;
+                background-color: #66bb6a;
             }
             QPushButton:disabled {
-                background-color: #bdbdbd;
-                color: #757575;
+                background-color: #e0e0e0;
+                color: #9e9e9e;
             }
         """)
         layout.addWidget(self.process_btn)
@@ -1341,7 +1359,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             }
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #6b9b7c, stop:1 #88b698);
+                    stop:0 #a5d6a7, stop:1 #81c784);
                 border-radius: 3px;
             }
         """)
@@ -1365,8 +1383,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.save_params_btn = QPushButton("Save Parameters")
         self.save_params_btn.setStyleSheet("""
             QPushButton {
-                background-color: #b8865f;
-                color: white;
+                background-color: #d7ccc8;
+                color: #5d4037;
                 padding: 10px;
                 font-weight: bold;
                 font-size: 10px;
@@ -1374,14 +1392,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 border-radius: 5px;
             }
             QPushButton:hover {
-                background-color: #9d714d;
+                background-color: #bcaaa4;
             }
             QPushButton:pressed {
-                background-color: #825c3d;
+                background-color: #a1887f;
             }
             QPushButton:disabled {
-                background-color: #bdbdbd;
-                color: #757575;
+                background-color: #e0e0e0;
+                color: #9e9e9e;
             }
         """)
         self.save_params_btn.clicked.connect(self.save_parameters)
@@ -1391,8 +1409,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.export_btn = QPushButton("Export Results")
         self.export_btn.setStyleSheet("""
             QPushButton {
-                background-color: #7d6b9d;
-                color: white;
+                background-color: #d1c4e9;
+                color: #4527a0;
                 padding: 10px;
                 font-weight: bold;
                 font-size: 10px;
@@ -1400,14 +1418,14 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 border-radius: 5px;
             }
             QPushButton:hover {
-                background-color: #685983;
+                background-color: #b39ddb;
             }
             QPushButton:pressed {
-                background-color: #544769;
+                background-color: #9575cd;
             }
             QPushButton:disabled {
-                background-color: #bdbdbd;
-                color: #757575;
+                background-color: #e0e0e0;
+                color: #9e9e9e;
             }
         """)
         self.export_btn.clicked.connect(self.export_results)
@@ -1829,6 +1847,23 @@ class EnhancedNMRProcessingUI(QMainWindow):
         
         # Auto Phase
         self.auto_phase_btn = QPushButton("Auto Phase")
+        self.auto_phase_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #90caf9;
+                color: #0d47a1;
+                padding: 6px;
+                font-weight: bold;
+                font-size: 10px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #64b5f6;
+            }
+            QPushButton:pressed {
+                background-color: #42a5f5;
+            }
+        """)
         self.auto_phase_btn.clicked.connect(self.run_auto_phase)
         phase_layout.addWidget(self.auto_phase_btn, 2, 0, 1, 3)
         
@@ -1837,7 +1872,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
 
         # Baseline Correction
         baseline_group = QGroupBox("Baseline Correction")
-        baseline_group.setStyleSheet(self.get_groupbox_style("#fbc02d"))
+        baseline_group.setStyleSheet(self.get_groupbox_style("#a68d42"))
         baseline_layout = QGridLayout()
         
         baseline_layout.addWidget(QLabel("Method:"), 0, 0)
@@ -1849,25 +1884,49 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Polynomial Order
         self.lbl_poly = QLabel("Fitting Order:")
         baseline_layout.addWidget(self.lbl_poly, 1, 0)
+        
+        self.baseline_poly_slider = QSlider(Qt.Horizontal)
+        self.baseline_poly_slider.setRange(0, 10)
+        self.baseline_poly_slider.setValue(1)
+        self.baseline_poly_slider.setStyleSheet(self.get_slider_style("#a68d42", "#a68d42"))
+        self.baseline_poly_slider.valueChanged.connect(self.on_baseline_poly_slider_changed)
+        baseline_layout.addWidget(self.baseline_poly_slider, 1, 1)
+        
         self.baseline_poly_order = QSpinBox()
         self.baseline_poly_order.setRange(0, 10)
         self.baseline_poly_order.setValue(1)
-        self.baseline_poly_order.valueChanged.connect(self.on_param_changed)
-        baseline_layout.addWidget(self.baseline_poly_order, 1, 1, 1, 2)
+        self.baseline_poly_order.setMinimumWidth(80)
+        self.baseline_poly_order.setStyleSheet(self.get_spinbox_style("#a68d42", "#a68d42", "#a68d42"))
+        self.baseline_poly_order.valueChanged.connect(self.on_baseline_poly_spinbox_changed)
+        baseline_layout.addWidget(self.baseline_poly_order, 1, 2)
         
         # AirPLS Lambda
         self.lbl_lambda = QLabel("Lambda:")
         baseline_layout.addWidget(self.lbl_lambda, 2, 0)
+        
+        self.baseline_lambda_slider = QSlider(Qt.Horizontal)
+        self.baseline_lambda_slider.setRange(10, 100000)
+        self.baseline_lambda_slider.setValue(100)
+        self.baseline_lambda_slider.setSingleStep(100)
+        self.baseline_lambda_slider.setStyleSheet(self.get_slider_style("#a68d42", "#a68d42"))
+        self.baseline_lambda_slider.setToolTip("Smoothness parameter for AirPLS.\nLarger value = smoother/stiffer baseline (10^4 - 10^5).\nSmaller value = more flexible baseline (10 - 100).")
+        self.baseline_lambda_slider.valueChanged.connect(self.on_baseline_lambda_slider_changed)
+        baseline_layout.addWidget(self.baseline_lambda_slider, 2, 1)
+        
         self.baseline_lambda = QSpinBox()
         self.baseline_lambda.setRange(10, 100000)
         self.baseline_lambda.setValue(100)
         self.baseline_lambda.setSingleStep(100)
+        self.baseline_lambda.setMinimumWidth(80)
+        self.baseline_lambda.setStyleSheet(self.get_spinbox_style("#a68d42", "#a68d42", "#a68d42"))
         self.baseline_lambda.setToolTip("Smoothness parameter for AirPLS.\nLarger value = smoother/stiffer baseline (10^4 - 10^5).\nSmaller value = more flexible baseline (10 - 100).")
-        self.baseline_lambda.valueChanged.connect(self.on_param_changed)
-        baseline_layout.addWidget(self.baseline_lambda, 2, 1, 1, 2)
+        self.baseline_lambda.valueChanged.connect(self.on_baseline_lambda_spinbox_changed)
+        baseline_layout.addWidget(self.baseline_lambda, 2, 2)
         
         # Initial visibility
         self.lbl_lambda.setVisible(False)
+        self.baseline_lambda_slider.setVisible(False)
+        self.baseline_lambda.setVisible(False)
         self.baseline_lambda.setVisible(False)
         
         baseline_group.setLayout(baseline_layout)
@@ -2000,15 +2059,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.time_maximize_btn = QPushButton("Maximize")
         self.time_maximize_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1976d2;
-                color: white;
+                background-color: #90caf9;
+                color: #0d47a1;
                 padding: 4px 12px;
                 font-size: 9px;
                 border: none;
                 border-radius: 3px;
             }
             QPushButton:hover {
-                background-color: #1565c0;
+                background-color: #64b5f6;
             }
         """)
         self.time_maximize_btn.clicked.connect(lambda: self.maximize_plot('time'))
@@ -2036,15 +2095,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq1_maximize_btn = QPushButton("Maximize")
         self.freq1_maximize_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1976d2;
-                color: white;
+                background-color: #90caf9;
+                color: #0d47a1;
                 padding: 4px 12px;
                 font-size: 9px;
                 border: none;
                 border-radius: 3px;
             }
             QPushButton:hover {
-                background-color: #1565c0;
+                background-color: #64b5f6;
             }
         """)
         self.freq1_maximize_btn.clicked.connect(lambda: self.maximize_plot('freq1'))
@@ -2072,15 +2131,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq2_maximize_btn = QPushButton("Maximize")
         self.freq2_maximize_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1976d2;
-                color: white;
+                background-color: #90caf9;
+                color: #0d47a1;
                 padding: 4px 12px;
                 font-size: 9px;
                 border: none;
                 border-radius: 3px;
             }
             QPushButton:hover {
-                background-color: #1565c0;
+                background-color: #64b5f6;
             }
         """)
         self.freq2_maximize_btn.clicked.connect(lambda: self.maximize_plot('freq2'))
@@ -2246,6 +2305,34 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.recon_points.setValue(val)
             self.schedule_processing()
 
+    @Slot()
+    def on_baseline_poly_slider_changed(self, value):
+        self.baseline_poly_order.blockSignals(True)
+        self.baseline_poly_order.setValue(value)
+        self.baseline_poly_order.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_baseline_poly_spinbox_changed(self, value):
+        self.baseline_poly_slider.blockSignals(True)
+        self.baseline_poly_slider.setValue(value)
+        self.baseline_poly_slider.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_baseline_lambda_slider_changed(self, value):
+        self.baseline_lambda.blockSignals(True)
+        self.baseline_lambda.setValue(value)
+        self.baseline_lambda.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_baseline_lambda_spinbox_changed(self, value):
+        self.baseline_lambda_slider.blockSignals(True)
+        self.baseline_lambda_slider.setValue(value)
+        self.baseline_lambda_slider.blockSignals(False)
+        self.schedule_processing()
+
     @Slot(str)
     def on_baseline_method_changed(self, method):
         """Update visibility of baseline correction parameters"""
@@ -2253,9 +2340,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
         is_airpls = method == "AirPLS"
         
         self.lbl_poly.setVisible(is_poly)
+        self.baseline_poly_slider.setVisible(is_poly)
         self.baseline_poly_order.setVisible(is_poly)
         
         self.lbl_lambda.setVisible(is_airpls)
+        self.baseline_lambda_slider.setVisible(is_airpls)
         self.baseline_lambda.setVisible(is_airpls)
         
         self.schedule_processing()
@@ -3640,7 +3729,57 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.metrics_table.item(2, 1).setText(f"{noise_a:.2f}")
         
         self.metrics_table.item(3, 0).setText("Linewidth (Hz)")
-        self.metrics_table.item(3, 1).setText("--") 
+        
+        # Calculate FWHM
+        fwhm = 0.0
+        if sig_idx is not None and np.any(sig_idx):
+            subset_freq = freq_axis[sig_idx]
+            subset_spec = spectrum_data[sig_idx]
+            
+            # Use Abs for FWHM calculation to handle negative peaks in Real mode
+            subset_spec_abs = np.abs(subset_spec)
+            peak_idx_local = np.argmax(subset_spec_abs)
+            peak_val = subset_spec_abs[peak_idx_local]
+            half_max = peak_val / 2.0
+            
+            # Find left crossing
+            left_idx = peak_idx_local
+            while left_idx > 0 and subset_spec_abs[left_idx] > half_max:
+                left_idx -= 1
+                
+            # Find right crossing
+            right_idx = peak_idx_local
+            while right_idx < len(subset_spec_abs) - 1 and subset_spec_abs[right_idx] > half_max:
+                right_idx += 1
+                
+            # Linear interpolation for better precision
+            if left_idx < peak_idx_local and right_idx > peak_idx_local:
+                # Left interp
+                y1 = subset_spec_abs[left_idx]
+                y2 = subset_spec_abs[left_idx+1]
+                x1 = subset_freq[left_idx]
+                x2 = subset_freq[left_idx+1]
+                if y2 != y1:
+                    freq_left = x1 + (half_max - y1) * (x2 - x1) / (y2 - y1)
+                else:
+                    freq_left = x1
+                
+                # Right interp
+                y1 = subset_spec_abs[right_idx-1]
+                y2 = subset_spec_abs[right_idx]
+                x1 = subset_freq[right_idx-1]
+                x2 = subset_freq[right_idx]
+                if y2 != y1:
+                    freq_right = x1 + (half_max - y1) * (x2 - x1) / (y2 - y1)
+                else:
+                    freq_right = x2
+                
+                fwhm = freq_right - freq_left
+        
+        if fwhm > 0:
+            self.metrics_table.item(3, 1).setText(f"{fwhm:.2f}")
+        else:
+            self.metrics_table.item(3, 1).setText("--") 
         
         self.metrics_table.item(4, 0).setText("Peak Freq (Hz)")
         # Find peak freq
