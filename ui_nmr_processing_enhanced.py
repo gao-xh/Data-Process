@@ -55,6 +55,7 @@ try:
         backward_linear_prediction, apply_phase_correction, auto_phase
     )
     from nmr_processing_lib.processing.postprocessing import baseline_correction
+    from nmr_processing_lib.processing.filtering import svd_denoising
 except ImportError:
     print("Warning: Could not import ZULF algorithms. Phase correction disabled.")
     # Define dummy functions if import fails
@@ -217,6 +218,17 @@ class ProcessingWorker(QThread):
         )
         svd_corrected = halp - smooth_svd
         
+        # Step 1.2: SVD Denoising (Cadzow)
+        if self.params.get('enable_svd', False):
+            if not self._running: return None
+            self.progress.emit("Applying SVD denoising...")
+            rank = int(self.params.get('svd_rank', 5))
+            try:
+                from nmr_processing_lib.processing.filtering import svd_denoising
+                svd_corrected = svd_denoising(svd_corrected, rank)
+            except Exception as e:
+                print(f"SVD Denoising failed: {e}")
+
         # Step 2: Time domain truncation (Start)
         if not self._running: return None
         self.progress.emit("Applying truncation...")
@@ -238,9 +250,11 @@ class ProcessingWorker(QThread):
             if n_backward > 0:
                 # Calculate training length (logic matches zulf_algorithms.py)
                 valid_len = len(svd_corrected)
-                lp_train_len = min(valid_len, 4 * order)
+                train_len = int(self.params.get('recon_train_len', 4 * order))
+                # Ensure train_len is valid
+                train_len = min(valid_len, train_len)
                 
-                svd_corrected = backward_linear_prediction(svd_corrected, n_backward, order)
+                svd_corrected = backward_linear_prediction(svd_corrected, n_backward, order, train_len=train_len)
                 n_backward_actual = n_backward
         
         # Apply end truncation
@@ -1574,6 +1588,39 @@ class EnhancedNMRProcessingUI(QMainWindow):
         savgol_group.setLayout(savgol_layout)
         layout.addWidget(savgol_group)
         
+        # 1.5 SVD Denoising
+        svd_group = QGroupBox("Advanced Denoising (SVD/Cadzow)")
+        svd_group.setStyleSheet(self.get_groupbox_style("#7b1fa2"))
+        svd_layout = QGridLayout()
+        svd_layout.setSpacing(10)
+        svd_layout.setContentsMargins(12, 15, 12, 12)
+        
+        # Enable Checkbox
+        self.enable_svd = QCheckBox("Enable SVD Denoising")
+        self.enable_svd.setToolTip("Enable Singular Value Decomposition (Cadzow) denoising.\nWarning: Computationally intensive.")
+        self.enable_svd.stateChanged.connect(self.on_param_changed)
+        svd_layout.addWidget(self.enable_svd, 0, 0, 1, 3)
+        
+        # Rank Slider
+        svd_layout.addWidget(QLabel("Rank (Components):"), 1, 0)
+        self.svd_rank_slider = QSlider(Qt.Horizontal)
+        self.svd_rank_slider.setRange(1, 50)
+        self.svd_rank_slider.setValue(5)
+        self.svd_rank_slider.setStyleSheet(self.get_slider_style("#ce93d8", "#ba68c8"))
+        self.svd_rank_slider.valueChanged.connect(self.on_svd_rank_slider_changed)
+        svd_layout.addWidget(self.svd_rank_slider, 1, 1)
+        
+        self.svd_rank_spin = QSpinBox()
+        self.svd_rank_spin.setRange(1, 50)
+        self.svd_rank_spin.setValue(5)
+        self.svd_rank_spin.setMinimumWidth(80)
+        self.svd_rank_spin.setStyleSheet(self.get_spinbox_style("#ce93d8", "#ba68c8", "#ab47bc"))
+        self.svd_rank_spin.valueChanged.connect(self.on_svd_rank_spin_changed)
+        svd_layout.addWidget(self.svd_rank_spin, 1, 2)
+        
+        svd_group.setLayout(svd_layout)
+        layout.addWidget(svd_group)
+        
         # 2. Backward Linear Prediction (Moved from old Tab 2)
         recon_group = QGroupBox("Signal Recovery (Backward LP)")
         recon_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))
@@ -1636,6 +1683,37 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_order.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
         self.recon_order.valueChanged.connect(self.on_recon_order_spinbox_changed)
         recon_layout.addWidget(self.recon_order, 2, 2)
+        
+        # Row 3: Training Points
+        train_label = QLabel("Training Points:")
+        train_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        recon_layout.addWidget(train_label, 3, 0)
+        
+        train_layout = QHBoxLayout()
+        self.recon_train_auto = QCheckBox("Auto (4x Order)")
+        self.recon_train_auto.setChecked(True)
+        self.recon_train_auto.setStyleSheet("font-size: 10px;")
+        self.recon_train_auto.toggled.connect(self.on_recon_train_auto_toggled)
+        train_layout.addWidget(self.recon_train_auto)
+        
+        self.recon_train_points = QSpinBox()
+        self.recon_train_points.setRange(1, 10000)
+        self.recon_train_points.setValue(256) # 4 * 64
+        self.recon_train_points.setEnabled(False)
+        self.recon_train_points.setMinimumWidth(80)
+        self.recon_train_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
+        self.recon_train_points.valueChanged.connect(self.schedule_processing)
+        train_layout.addWidget(self.recon_train_points)
+        
+        recon_layout.addLayout(train_layout, 3, 1, 1, 2)
+        
+        recon_group.setLayout(recon_layout)
+        layout.addWidget(recon_group)
+        self.recon_train_factor.setMinimumWidth(80)
+        self.recon_train_factor.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
+        self.recon_train_factor.setToolTip("Multiplier for LP training length.\nTraining points = Factor * Order.\nDefault is 4x.")
+        self.recon_train_factor.valueChanged.connect(self.on_recon_train_spinbox_changed)
+        recon_layout.addWidget(self.recon_train_factor, 3, 2)
         
         recon_group.setLayout(recon_layout)
         layout.addWidget(recon_group)
@@ -2251,6 +2329,21 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.apod_slider.setValue(int(value * 100))
         self.apod_slider.blockSignals(False)
         self.schedule_processing()
+
+    @Slot()
+    def on_svd_rank_slider_changed(self, value):
+        self.svd_rank_spin.blockSignals(True)
+        self.svd_rank_spin.setValue(value)
+        self.svd_rank_spin.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_svd_rank_spin_changed(self, value):
+        self.svd_rank_slider.blockSignals(True)
+        self.svd_rank_slider.setValue(value)
+        self.svd_rank_slider.blockSignals(False)
+        self.schedule_processing()
+
     
     @Slot()
     def on_zf_changed(self, value):
@@ -2286,6 +2379,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_order.blockSignals(True)
         self.recon_order.setValue(value)
         self.recon_order.blockSignals(False)
+        
+        if hasattr(self, 'recon_train_auto') and self.recon_train_auto.isChecked():
+            self.recon_train_points.setValue(value * 4)
+            
         self.schedule_processing()
 
     @Slot()
@@ -2293,6 +2390,18 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_order_slider.blockSignals(True)
         self.recon_order_slider.setValue(int(value))
         self.recon_order_slider.blockSignals(False)
+        
+        if hasattr(self, 'recon_train_auto') and self.recon_train_auto.isChecked():
+            self.recon_train_points.setValue(int(value) * 4)
+            
+        self.schedule_processing()
+
+    @Slot(bool)
+    def on_recon_train_auto_toggled(self, checked):
+        self.recon_train_points.setEnabled(not checked)
+        if checked:
+            order = self.recon_order.value()
+            self.recon_train_points.setValue(order * 4)
         self.schedule_processing()
 
     @Slot(bool)
@@ -2801,6 +2910,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
             'enable_recon': self.enable_recon.isChecked(),
             'recon_points': self.recon_points.value(),
             'recon_order': self.recon_order.value(),
+            'recon_train_len': self.recon_train_points.value(),
+            'enable_svd': self.enable_svd.isChecked(),
+            'svd_rank': self.svd_rank_spin.value(),
             'phase0': self.phase0_spin.value(),
             'phase1': self.phase1_spin.value(),
             # Baseline Params

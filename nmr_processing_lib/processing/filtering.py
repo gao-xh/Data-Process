@@ -7,6 +7,7 @@ Signal filtering functions including Savgol and window functions.
 
 import numpy as np
 from scipy.signal import savgol_filter
+import scipy.linalg
 from enum import Enum
 from typing import Optional
 
@@ -21,6 +22,65 @@ class WindowType(Enum):
     BLACKMAN = "blackman"
     BARTLETT = "bartlett"
     KAISER = "kaiser"
+
+
+def svd_denoising(data: np.ndarray, rank: int) -> np.ndarray:
+    """
+    Apply SVD (Cadzow) denoising to NMR data.
+    
+    Constructs a Hankel matrix from the time-domain signal, performs SVD,
+    truncates to the specified rank, and reconstructs the signal.
+    This is effective for separating signal (large singular values) from noise.
+    
+    Args:
+        data: Input time domain data (1D array)
+        rank: Number of singular values to keep (signal components)
+        
+    Returns:
+        Denoised data
+    """
+    N = len(data)
+    if N == 0:
+        return data
+        
+    # Choose L close to N/2 for best separation, but limit for performance if needed
+    L = N // 2
+    M = N - L + 1
+    
+    # Construct Hankel matrix
+    # First column: data[0]...data[L-1]
+    # Last row: data[L-1]...data[N-1]
+    c = data[:L]
+    r = data[L-1:]
+    H = scipy.linalg.hankel(c, r)
+    
+    # SVD
+    # full_matrices=False makes U: (L, K), Vh: (K, M) where K = min(L, M)
+    U, S, Vh = scipy.linalg.svd(H, full_matrices=False)
+    
+    # Truncate singular values
+    # Keep only top 'rank' values
+    if rank < len(S):
+        S[rank:] = 0
+    
+    # Reconstruct Hankel matrix
+    H_filtered = U @ np.diag(S) @ Vh
+    
+    # Reconstruct signal by averaging anti-diagonals
+    # We flip the matrix left-right so anti-diagonals become main diagonals
+    H_flipped = np.fliplr(H_filtered)
+    
+    data_filtered = np.zeros(N, dtype=data.dtype)
+    
+    # The anti-diagonal k of H corresponds to data[k]
+    # In H_flipped, this corresponds to diagonal with offset = M - 1 - k
+    for k in range(N):
+        offset = M - 1 - k
+        # Extract diagonal and average
+        diag = np.diagonal(H_flipped, offset=offset)
+        data_filtered[k] = np.mean(diag)
+        
+    return data_filtered
 
 
 def savgol_filter_nmr(

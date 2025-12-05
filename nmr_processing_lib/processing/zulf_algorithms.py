@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import hankel, lstsq, pinv
 from scipy.optimize import minimize
 
-def backward_linear_prediction(data, n_dead, order):
+def backward_linear_prediction(data, n_dead, order, train_factor=4, train_len=None):
     """
     Reconstruct missing initial points using Backward Linear Prediction (BLP).
     
@@ -10,6 +10,8 @@ def backward_linear_prediction(data, n_dead, order):
         data (np.ndarray): The acquired FID signal (1D complex array).
         n_dead (int): Number of missing points to reconstruct at the beginning.
         order (int): The order of the linear prediction (number of coefficients).
+        train_factor (int): Multiplier for training length (train_len = train_factor * order). Used if train_len is None.
+        train_len (int): Explicit number of points to use for training. Overrides train_factor.
         
     Returns:
         np.ndarray: The reconstructed FID with prepended points.
@@ -35,7 +37,11 @@ def backward_linear_prediction(data, n_dead, order):
     
     # Construct Hankel matrix from the valid data
     # We use a training region. Let's use the first 50% of valid data or up to 2*order points.
-    train_len = min(N, 4 * order)
+    if train_len is None:
+        train_len = min(N, int(train_factor * order))
+    else:
+        train_len = min(N, int(train_len))
+        
     train_data = data[:train_len]
     
     # Create Hankel matrix for backward prediction
