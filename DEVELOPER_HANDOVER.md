@@ -1,5 +1,5 @@
 # 📘 NMR Processing Project - 开发者交接指南
-
+代码中不要出现中文和Emoji！！！
 ### 1. 项目概况 (Project Overview)
 这是一个基于 **Python (PySide6)** 和 **Matplotlib** 的桌面应用程序，用于 **NMR (核磁共振) 信号的高级处理与可视化**。
 *   **核心目标**: 提供从原始 FID 数据到频谱图的完整处理流，包括降噪、预测、切趾、FFT 和相位校正。
