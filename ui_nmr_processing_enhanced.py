@@ -256,6 +256,7 @@ class ProcessingWorker(QThread):
                 
                 svd_corrected = backward_linear_prediction(svd_corrected, n_backward, order, train_len=train_len)
                 n_backward_actual = n_backward
+                lp_train_len = train_len
         
         # Apply end truncation
         if trunc_end > 0:
@@ -1637,6 +1638,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.sync_recon_checkbox = QCheckBox("Sync with Truncation Start")
         self.sync_recon_checkbox.toggled.connect(self.on_sync_recon_toggled)
         checkbox_layout.addWidget(self.sync_recon_checkbox)
+        
+        self.recon_train_auto = QCheckBox("Auto Training (4x Order)")
+        self.recon_train_auto.setChecked(True)
+        self.recon_train_auto.toggled.connect(self.on_recon_train_auto_toggled)
+        checkbox_layout.addWidget(self.recon_train_auto)
+        
         checkbox_layout.addStretch()
         
         recon_layout.addLayout(checkbox_layout, 0, 0, 1, 3)
@@ -1689,12 +1696,13 @@ class EnhancedNMRProcessingUI(QMainWindow):
         train_label.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
         recon_layout.addWidget(train_label, 3, 0)
         
-        train_layout = QHBoxLayout()
-        self.recon_train_auto = QCheckBox("Auto (4x Order)")
-        self.recon_train_auto.setChecked(True)
-        self.recon_train_auto.setStyleSheet("font-size: 10px;")
-        self.recon_train_auto.toggled.connect(self.on_recon_train_auto_toggled)
-        train_layout.addWidget(self.recon_train_auto)
+        self.recon_train_slider = QSlider(Qt.Horizontal)
+        self.recon_train_slider.setRange(1, 5120)
+        self.recon_train_slider.setValue(256)
+        self.recon_train_slider.setEnabled(False)
+        self.recon_train_slider.setStyleSheet(self.get_slider_style("#d32f2f", "#b71c1c"))
+        self.recon_train_slider.valueChanged.connect(self.on_recon_train_slider_changed)
+        recon_layout.addWidget(self.recon_train_slider, 3, 1)
         
         self.recon_train_points = QSpinBox()
         self.recon_train_points.setRange(1, 10000)
@@ -1702,18 +1710,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_train_points.setEnabled(False)
         self.recon_train_points.setMinimumWidth(80)
         self.recon_train_points.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
-        self.recon_train_points.valueChanged.connect(self.schedule_processing)
-        train_layout.addWidget(self.recon_train_points)
-        
-        recon_layout.addLayout(train_layout, 3, 1, 1, 2)
-        
-        recon_group.setLayout(recon_layout)
-        layout.addWidget(recon_group)
-        self.recon_train_factor.setMinimumWidth(80)
-        self.recon_train_factor.setStyleSheet(self.get_spinbox_style("#d32f2f", "#b71c1c", "#9a0007"))
-        self.recon_train_factor.setToolTip("Multiplier for LP training length.\nTraining points = Factor * Order.\nDefault is 4x.")
-        self.recon_train_factor.valueChanged.connect(self.on_recon_train_spinbox_changed)
-        recon_layout.addWidget(self.recon_train_factor, 3, 2)
+        self.recon_train_points.valueChanged.connect(self.on_recon_train_spinbox_changed)
+        recon_layout.addWidget(self.recon_train_points, 3, 2)
         
         recon_group.setLayout(recon_layout)
         layout.addWidget(recon_group)
@@ -2381,7 +2379,9 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_order.blockSignals(False)
         
         if hasattr(self, 'recon_train_auto') and self.recon_train_auto.isChecked():
-            self.recon_train_points.setValue(value * 4)
+            val = value * 4
+            self.recon_train_points.setValue(val)
+            self.recon_train_slider.setValue(val)
             
         self.schedule_processing()
 
@@ -2392,16 +2392,35 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.recon_order_slider.blockSignals(False)
         
         if hasattr(self, 'recon_train_auto') and self.recon_train_auto.isChecked():
-            self.recon_train_points.setValue(int(value) * 4)
+            val = int(value) * 4
+            self.recon_train_points.setValue(val)
+            self.recon_train_slider.setValue(val)
             
         self.schedule_processing()
 
     @Slot(bool)
     def on_recon_train_auto_toggled(self, checked):
         self.recon_train_points.setEnabled(not checked)
+        self.recon_train_slider.setEnabled(not checked)
         if checked:
             order = self.recon_order.value()
-            self.recon_train_points.setValue(order * 4)
+            val = order * 4
+            self.recon_train_points.setValue(val)
+            self.recon_train_slider.setValue(val)
+        self.schedule_processing()
+
+    @Slot()
+    def on_recon_train_slider_changed(self, value):
+        self.recon_train_points.blockSignals(True)
+        self.recon_train_points.setValue(value)
+        self.recon_train_points.blockSignals(False)
+        self.schedule_processing()
+
+    @Slot()
+    def on_recon_train_spinbox_changed(self, value):
+        self.recon_train_slider.blockSignals(True)
+        self.recon_train_slider.setValue(int(value))
+        self.recon_train_slider.blockSignals(False)
         self.schedule_processing()
 
     @Slot(bool)
@@ -3367,10 +3386,11 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 if max_val > 0: y_spec_b_low = y_spec_b_low / max_val
         else:
             # Global normalization for Low Freq view
-            max_val_a = np.max(y_spec_a)
-            max_val_b = np.max(y_spec_b)
-            if max_val_a > 0: y_spec_a_low = y_spec_a_low / max_val_a
-            if max_val_b > 0: y_spec_b_low = y_spec_b_low / max_val_b
+            # For Unified Scale, we want to preserve relative amplitudes, so we don't normalize individually
+            # or we could normalize both by the global max of both.
+            # Here we choose to use raw values (or normalized by global max if we wanted 0-1)
+            # But to be consistent with "Unified Scale" meaning "Same Scale", raw values are fine.
+            pass
         
         self.freq1_canvas.fig.clear()
         self.freq1_canvas.axes = self.freq1_canvas.fig.add_subplot(111)
@@ -3419,10 +3439,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 if max_val > 0: y_spec_b_high = y_spec_b_high / max_val
         else:
             # Global normalization for High Freq view
-            max_val_a = np.max(y_spec_a)
-            max_val_b = np.max(y_spec_b)
-            if max_val_a > 0: y_spec_a_high = y_spec_a_high / max_val_a
-            if max_val_b > 0: y_spec_b_high = y_spec_b_high / max_val_b
+            # For Unified Scale, use raw values to preserve relative amplitudes
+            pass
         
         self.freq2_canvas.fig.clear()
         self.freq2_canvas.axes = self.freq2_canvas.fig.add_subplot(111)
