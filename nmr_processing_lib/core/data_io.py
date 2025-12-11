@@ -100,7 +100,8 @@ class DataInterface:
     def from_nmrduino_folder(
         folder_path: str,
         scans: Union[int, List[int]] = 0,
-        use_cache: bool = True
+        use_cache: bool = True,
+        **kwargs
     ) -> NMRData:
         """
         Load data from NMRduino folder.
@@ -109,6 +110,7 @@ class DataInterface:
             folder_path: Path to experiment folder
             scans: 0 for all, int for single scan, [start, end] for range
             use_cache: Use cached compiled data if available
+            **kwargs: Additional arguments for load_nmrduino_data
         
         Returns:
             NMRData object
@@ -121,7 +123,7 @@ class DataInterface:
         
         # Load from .dat files
         time_data, sampling_rate, acq_time, scan_nums = load_nmrduino_data(
-            folder_path, scans
+            folder_path, scans, **kwargs
         )
         
         return NMRData(
@@ -258,7 +260,14 @@ def load_nmrduino_data(
                     break
     
     # Find all .dat files
-    dat_files = sorted(path_to_exp.glob('*.dat'))
+    dat_files = list(path_to_exp.glob('*.dat'))
+    try:
+        # Try numerical sort first (for 0.dat, 1.dat, 10.dat)
+        dat_files.sort(key=lambda f: int(f.stem))
+    except ValueError:
+        # Fallback to alphabetical if filenames are not integers
+        dat_files.sort()
+        
     num_scans = len(dat_files)
     
     if num_scans == 0:

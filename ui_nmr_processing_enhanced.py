@@ -22,9 +22,9 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QSlider, QSpinBox, QDoubleSpinBox,
     QGroupBox, QCheckBox, QRadioButton, QFileDialog, QTextEdit, QMessageBox,
     QGridLayout, QTabWidget, QProgressBar, QComboBox, QSplitter,
-    QScrollArea, QMenuBar, QMenu, QDialog, QListWidget
+    QScrollArea, QMenuBar, QMenu, QDialog, QListWidget, QLineEdit
 )
-from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSettings
+from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QSettings, QObject
 from PySide6.QtGui import QFont
 
 import matplotlib
@@ -64,6 +64,13 @@ except ImportError:
     def auto_phase(spec): return 0, 0
     def baseline_correction(freq, spec, method='polynomial', order=1, lambda_=100): return spec, np.zeros_like(spec)
 
+# Import Realtime Monitor
+try:
+    from nmr_processing_lib.utils.realtime_monitor import RealtimeDataMonitor
+except ImportError:
+    print("Warning: Could not import RealtimeDataMonitor")
+    RealtimeDataMonitor = None
+
 # Import nmrduino_util (using fixed version with proper path handling)
 try:
     from nmr_processing_lib import nmrduino_util_fixed as nmr_util
@@ -71,6 +78,13 @@ try:
 except:
     HAS_NMRDUINO = False
     print("Warning: nmrduino_util not found, some features disabled")
+
+
+class LiveMonitorSignals(QObject):
+    """Signals for Live Monitor bridge"""
+    data_received = Signal(object, int)  # nmr_data, scan_count
+    error_occurred = Signal(str)
+    status_updated = Signal(str)
 
 
 class MultiFolderDialog(QDialog):
@@ -380,6 +394,15 @@ class EnhancedNMRProcessingUI(QMainWindow):
         # Worker thread
         self.worker = None
         
+        # Live Monitor
+        self.monitor = None
+        self.live_signals = LiveMonitorSignals()
+        self.live_signals.data_received.connect(self.handle_live_data)
+        self.live_signals.error_occurred.connect(self.handle_live_error)
+        self.live_signals.status_updated.connect(self.update_live_status)
+        self.live_folder = None
+        self.is_monitoring = False
+
         # Default parameters (matching notebook)
         self.params = {
             'zf_factor': 0.0,
@@ -776,6 +799,82 @@ class EnhancedNMRProcessingUI(QMainWindow):
         data_group.setLayout(data_layout)
         layout.addWidget(data_group)
         
+        # Live Monitor Group
+        self.live_group = QGroupBox("Live Monitor")
+        self.live_group.setStyleSheet(self.get_groupbox_style("#d32f2f"))  # Red accent
+        live_layout = QVBoxLayout()
+        live_layout.setSpacing(8)
+        
+        # Folder selection
+        live_folder_layout = QHBoxLayout()
+        self.live_folder_edit = QLineEdit()
+        self.live_folder_edit.setPlaceholderText("Select monitor folder...")
+        self.live_folder_edit.setReadOnly(True)
+        self.live_folder_edit.setStyleSheet("""
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                background: #f5f5f5;
+                color: #616161;
+            }
+        """)
+        
+        live_browse_btn = QPushButton("...")
+        live_browse_btn.setFixedWidth(30)
+        live_browse_btn.clicked.connect(self.select_live_folder)
+        
+        live_folder_layout.addWidget(self.live_folder_edit)
+        live_folder_layout.addWidget(live_browse_btn)
+        live_layout.addLayout(live_folder_layout)
+        
+        # Controls
+        live_ctrl_layout = QVBoxLayout()
+        
+        mode_layout = QHBoxLayout()
+        self.live_mode_avg = QRadioButton("Average")
+        self.live_mode_avg.setChecked(True)
+        self.live_mode_avg.toggled.connect(self.on_live_mode_changed)
+        
+        self.live_mode_single = QRadioButton("Single (Latest)")
+        self.live_mode_single.toggled.connect(self.on_live_mode_changed)
+        
+        mode_layout.addWidget(self.live_mode_avg)
+        mode_layout.addWidget(self.live_mode_single)
+        live_ctrl_layout.addLayout(mode_layout)
+        
+        self.monitor_btn = QPushButton("Start Monitoring")
+        self.monitor_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d32f2f;
+                color: white;
+                padding: 8px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:checked {
+                background-color: #b71c1c;
+            }
+            QPushButton:disabled {
+                background-color: #e0e0e0;
+                color: #9e9e9e;
+            }
+        """)
+        self.monitor_btn.setCheckable(True)
+        self.monitor_btn.clicked.connect(self.toggle_monitoring)
+        self.monitor_btn.setEnabled(False)
+        
+        live_ctrl_layout.addWidget(self.monitor_btn)
+        live_layout.addLayout(live_ctrl_layout)
+        
+        # Status
+        self.live_status_label = QLabel("Ready")
+        self.live_status_label.setStyleSheet("color: #757575; font-style: italic; font-size: 10px;")
+        live_layout.addWidget(self.live_status_label)
+        
+        self.live_group.setLayout(live_layout)
+        layout.addWidget(self.live_group)
+
         # Data B Loading (for comparison mode)
         self.data_b_group = QGroupBox("Data B Loading (Comparison)")
         self.data_b_group.setStyleSheet("""
@@ -3731,6 +3830,130 @@ class EnhancedNMRProcessingUI(QMainWindow):
             
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
+
+    # =========================================================================
+    # Live Monitor Methods
+    # =========================================================================
+
+    def select_live_folder(self):
+        """Select folder for live monitoring"""
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder to Monitor")
+        if folder:
+            self.live_folder = folder
+            self.live_folder_edit.setText(folder)
+            self.monitor_btn.setEnabled(True)
+            self.live_status_label.setText("Ready to monitor")
+
+    def toggle_monitoring(self, checked):
+        """Start or stop live monitoring"""
+        if checked:
+            # Start monitoring
+            if not self.live_folder:
+                QMessageBox.warning(self, "Error", "Please select a folder first")
+                self.monitor_btn.setChecked(False)
+                return
+            
+            if RealtimeDataMonitor is None:
+                QMessageBox.critical(self, "Error", "RealtimeDataMonitor module not found")
+                self.monitor_btn.setChecked(False)
+                return
+                
+            try:
+                self.monitor = RealtimeDataMonitor(self.live_folder, poll_interval=1.0)
+                
+                # Connect callbacks to signals
+                # We use a closure to capture 'self' safely
+                def on_new_data(nmr_data, count):
+                    self.live_signals.data_received.emit(nmr_data, count)
+                    
+                def on_error(msg):
+                    self.live_signals.error_occurred.emit(msg)
+                    
+                self.monitor.on_average_updated = on_new_data
+                self.monitor.on_new_scan = on_new_data  # Handle both modes
+                self.monitor.on_error = on_error
+                
+                # Start
+                avg_mode = self.live_mode_avg.isChecked()
+                self.monitor.start(average_mode=avg_mode)
+                
+                self.is_monitoring = True
+                self.monitor_btn.setText("Stop Monitoring")
+                self.monitor_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #424242;
+                        color: white;
+                        padding: 8px;
+                        font-weight: bold;
+                        border-radius: 4px;
+                    }
+                """)
+                self.live_folder_edit.setEnabled(False)
+                self.live_status_label.setText("Monitoring active...")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to start monitor:\n{e}")
+                self.monitor_btn.setChecked(False)
+        else:
+            # Stop monitoring
+            if self.monitor:
+                self.monitor.stop()
+                self.monitor = None
+            
+            self.is_monitoring = False
+            self.monitor_btn.setText("Start Monitoring")
+            self.monitor_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #d32f2f;
+                    color: white;
+                    padding: 8px;
+                    font-weight: bold;
+                    border-radius: 4px;
+                }
+                QPushButton:checked {
+                    background-color: #b71c1c;
+                }
+            """)
+            self.live_folder_edit.setEnabled(True)
+            self.live_status_label.setText("Monitoring stopped")
+
+    def on_live_mode_changed(self):
+        """Handle live mode change"""
+        if self.monitor and self.is_monitoring:
+            avg_mode = self.live_mode_avg.isChecked()
+            self.monitor.set_mode(avg_mode)
+
+    @Slot(object, int)
+    def handle_live_data(self, nmr_data, scan_count):
+        """Handle incoming live data"""
+        try:
+            # Update data structures
+            self.halp = nmr_data.time_data
+            self.sampling_rate = nmr_data.sampling_rate
+            self.acq_time = nmr_data.acquisition_time
+            self.scan_count = scan_count
+            self.current_path = self.live_folder
+            
+            # Update UI info
+            self.data_info.setText(f"LIVE MONITORING\nScans: {scan_count}\nPoints: {len(self.halp)}")
+            self.live_status_label.setText(f"Last update: {scan_count} scans")
+            
+            # Trigger processing
+            self.process_data()
+            
+        except Exception as e:
+            print(f"Error handling live data: {e}")
+
+    @Slot(str)
+    def handle_live_error(self, msg):
+        """Handle live monitor error"""
+        self.live_status_label.setText(f"Error: {msg}")
+        print(f"Live Monitor Error: {msg}")
+
+    @Slot(str)
+    def update_live_status(self, msg):
+        """Update status label"""
+        self.live_status_label.setText(msg)
 
     def on_same_params_changed(self, state):
         """Handle same params checkbox change"""

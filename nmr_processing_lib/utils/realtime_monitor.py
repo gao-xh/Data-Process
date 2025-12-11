@@ -75,12 +75,13 @@ class RealtimeDataMonitor:
         self.on_scan_count_changed: Optional[Callable[[int], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
     
-    def start(self, average_mode: bool = True):
+    def start(self, average_mode: bool = True, process_existing: bool = False):
         """
         Start monitoring folder for new scans.
         
         Args:
             average_mode: True for cumulative average, False for single scans
+            process_existing: If True, process all existing files in folder
         """
         if self.state.is_running:
             print("Monitor already running")
@@ -92,11 +93,13 @@ class RealtimeDataMonitor:
         
         # Get initial scan count
         initial_scans = get_available_scans(self.state.folder_path)
-        if initial_scans:
+        
+        if initial_scans and not process_existing:
             self.state.last_scan_number = max(initial_scans)
             self.state.scan_numbers = initial_scans
         else:
-            self.state.last_scan_number = 0
+            # Start from -1 to detect 0.dat and all subsequent files
+            self.state.last_scan_number = -1
             self.state.scan_numbers = []
         
         # Reset accumulated data
@@ -108,7 +111,7 @@ class RealtimeDataMonitor:
         self._monitor_thread.start()
         
         print(f"Monitor started: {'Average' if average_mode else 'Single'} mode")
-        print(f"Initial scans: {len(initial_scans)}")
+        print(f"Initial scans: {len(initial_scans) if initial_scans else 0}")
     
     def stop(self):
         """Stop monitoring."""
@@ -165,15 +168,21 @@ class RealtimeDataMonitor:
         """
         try:
             # Load scan data
+            # IMPORTANT: Disable cache for realtime monitoring to force reading new files
+            # Note: scan_num is 0-based (from filename), but load_nmrduino_data expects 1-based index
+            # So we pass scan_num + 1
             data = DataInterface.from_nmrduino_folder(
                 self.state.folder_path,
-                scans=scan_num
+                scans=scan_num + 1,
+                use_cache=False,
+                nowarn=True
             )
+            
+            # Always update average
+            self._update_average(data)
             
             if self.state.average_mode:
                 # Cumulative averaging mode
-                self._update_average(data)
-                
                 # Create averaged data object
                 averaged_data = DataInterface.from_arrays(
                     self._accumulated_data / self._num_accumulated,
@@ -250,20 +259,13 @@ class RealtimeDataMonitor:
     
     def set_mode(self, average_mode: bool):
         """
-        Switch between single and average mode.
+        Switch between single and average mode without resetting data.
         
         Args:
             average_mode: True for average, False for single
         """
-        was_running = self.state.is_running
-        
-        if was_running:
-            self.stop()
-        
         self.state.average_mode = average_mode
-        
-        if was_running:
-            self.start(average_mode)
+        print(f"Monitor mode switched to: {'Average' if average_mode else 'Single'}")
     
     def get_status(self) -> dict:
         """
