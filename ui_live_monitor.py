@@ -147,6 +147,133 @@ class LiveMonitorUI(QMainWindow):
         
         self.init_ui()
         
+    def get_slider_style(self, color, hover_color):
+        return f"""
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: #e0e0e0;
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {color};
+                width: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: {hover_color};
+            }}
+        """
+
+    def get_spinbox_style(self, color, btn_color, hover_color):
+        return f"""
+            QSpinBox, QDoubleSpinBox {{
+                font-weight: bold;
+                color: white;
+                background-color: {color};
+                padding: 4px 8px;
+                border-radius: 4px;
+                border: none;
+                font-size: 11px;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button,
+            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+                background-color: {btn_color};
+                border: none;
+                width: 16px;
+            }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+            QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
+                background-color: {hover_color};
+            }}
+        """
+
+    def get_groupbox_style(self, title_color):
+        return f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: 11px;
+                border: 2px solid #e0e0e0;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 10px;
+                padding: 0 5px;
+                color: {title_color};
+            }}
+        """
+
+    def add_slider_param(self, layout, label, value, min_val, max_val, colors):
+        # colors: (slider_main, slider_hover, spin_bg, spin_btn, spin_hover)
+        row = QHBoxLayout()
+        lbl = QLabel(label)
+        lbl.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        row.addWidget(lbl)
+        
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(min_val, max_val)
+        slider.setValue(value)
+        slider.setStyleSheet(self.get_slider_style(colors[0], colors[1]))
+        
+        spin = QSpinBox()
+        spin.setRange(min_val, max_val)
+        spin.setValue(value)
+        spin.setMinimumWidth(70)
+        spin.setStyleSheet(self.get_spinbox_style(colors[2], colors[3], colors[4]))
+        
+        slider.valueChanged.connect(spin.setValue)
+        spin.valueChanged.connect(slider.setValue)
+        slider.valueChanged.connect(self.schedule_process)
+        spin.valueChanged.connect(self.schedule_process)
+        
+        row.addWidget(slider)
+        row.addWidget(spin)
+        layout.addLayout(row)
+        return spin, slider
+
+    def add_float_slider_param(self, layout, label, value, min_val, max_val, mult, colors):
+        row = QHBoxLayout()
+        lbl = QLabel(label)
+        lbl.setStyleSheet("font-size: 10px; color: #424242; font-weight: bold;")
+        row.addWidget(lbl)
+        
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(int(min_val * mult), int(max_val * mult))
+        slider.setValue(int(value * mult))
+        slider.setStyleSheet(self.get_slider_style(colors[0], colors[1]))
+        
+        spin = QDoubleSpinBox()
+        spin.setRange(min_val, max_val)
+        spin.setValue(value)
+        spin.setSingleStep(1.0/mult)
+        spin.setDecimals(int(np.log10(mult)))
+        spin.setMinimumWidth(70)
+        spin.setStyleSheet(self.get_spinbox_style(colors[2], colors[3], colors[4]))
+        
+        def update_spin(val):
+            spin.blockSignals(True)
+            spin.setValue(val / mult)
+            spin.blockSignals(False)
+            self.schedule_process()
+            
+        def update_slider(val):
+            slider.blockSignals(True)
+            slider.setValue(int(val * mult))
+            slider.blockSignals(False)
+            self.schedule_process()
+            
+        slider.valueChanged.connect(update_spin)
+        spin.valueChanged.connect(update_slider)
+        
+        row.addWidget(slider)
+        row.addWidget(spin)
+        layout.addLayout(row)
+        return spin, slider
+
     def init_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -159,7 +286,7 @@ class LiveMonitorUI(QMainWindow):
         
         # Monitor Control
         gb_mon = QGroupBox("Monitor Control")
-        gb_mon.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #d32f2f; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; color: #d32f2f; }")
+        gb_mon.setStyleSheet(self.get_groupbox_style("#d32f2f"))
         l_mon = QVBoxLayout()
         
         self.folder_label = QLabel("No folder selected")
@@ -203,47 +330,69 @@ class LiveMonitorUI(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         params_widget = QWidget()
         params_layout = QVBoxLayout(params_widget)
+        params_layout.setSpacing(15)
         
         # Visualization Settings
         self.create_visualization_group(params_layout)
         
         # Savgol
-        self.spin_conv, self.slider_conv = self.add_slider_param(params_layout, "Window", 300, 10, 2000)
-        self.spin_poly, self.slider_poly = self.add_slider_param(params_layout, "Poly Order", 2, 1, 10)
+        savgol_colors = ("#5c7a99", "#4a6580", "#5c7a99", "#4a6580", "#3a5166")
+        gb_savgol = QGroupBox("Signal Filtering (Savitzky-Golay)")
+        gb_savgol.setStyleSheet(self.get_groupbox_style("#1976d2"))
+        l_savgol = QVBoxLayout()
+        self.spin_conv, self.slider_conv = self.add_slider_param(l_savgol, "Window", 300, 10, 2000, savgol_colors)
+        self.spin_poly, self.slider_poly = self.add_slider_param(l_savgol, "Poly Order", 2, 1, 10, savgol_colors)
+        gb_savgol.setLayout(l_savgol)
+        params_layout.addWidget(gb_savgol)
         
         # SVD
+        svd_colors = ("#ce93d8", "#ba68c8", "#ce93d8", "#ba68c8", "#ab47bc")
         gb_svd = QGroupBox("SVD Denoising")
+        gb_svd.setStyleSheet(self.get_groupbox_style("#7b1fa2"))
         l_svd = QVBoxLayout()
         self.chk_svd = QCheckBox("Enable SVD")
         l_svd.addWidget(self.chk_svd)
-        self.spin_rank, self.slider_rank = self.add_slider_param(l_svd, "Rank", 5, 1, 50, group=False)
+        self.spin_rank, self.slider_rank = self.add_slider_param(l_svd, "Rank", 5, 1, 50, svd_colors)
         gb_svd.setLayout(l_svd)
         params_layout.addWidget(gb_svd)
         
-        # Truncation
-        self.spin_trunc_start, self.slider_trunc_start = self.add_slider_param(params_layout, "Trunc Start", 10, 0, 5000)
-        self.spin_trunc_end, self.slider_trunc_end = self.add_slider_param(params_layout, "Trunc End", 10, 0, 5000)
+        # Apodization (Truncation + T2* + ZF)
+        apod_colors = ("#ef5350", "#c62828", "#ef5350", "#c62828", "#b71c1c")
+        gb_apod = QGroupBox("Apodization && Truncation")
+        gb_apod.setStyleSheet(self.get_groupbox_style("#c62828"))
+        l_apod = QVBoxLayout()
+        self.spin_trunc_start, self.slider_trunc_start = self.add_slider_param(l_apod, "Trunc Start", 10, 0, 5000, apod_colors)
+        self.spin_trunc_end, self.slider_trunc_end = self.add_slider_param(l_apod, "Trunc End", 10, 0, 5000, apod_colors)
+        # T2* with higher resolution (1000 multiplier)
+        self.spin_t2, self.slider_t2 = self.add_float_slider_param(l_apod, "T2*", 0.0, 0.0, 10.0, 1000, apod_colors)
+        self.chk_hanning = QCheckBox("Hanning Window")
+        l_apod.addWidget(self.chk_hanning)
+        self.spin_zf, self.slider_zf = self.add_float_slider_param(l_apod, "Zero Fill", 0.0, 0.0, 5.0, 10, apod_colors)
+        gb_apod.setLayout(l_apod)
+        params_layout.addWidget(gb_apod)
         
         # LP
+        lp_colors = ("#d32f2f", "#b71c1c", "#d32f2f", "#b71c1c", "#9a0007")
         gb_lp = QGroupBox("Backward LP")
+        gb_lp.setStyleSheet(self.get_groupbox_style("#d32f2f"))
         l_lp = QVBoxLayout()
         self.chk_lp = QCheckBox("Enable LP")
         l_lp.addWidget(self.chk_lp)
-        self.spin_lp_points, self.slider_lp_points = self.add_slider_param(l_lp, "Points", 0, 0, 1000, group=False)
-        self.spin_lp_order, self.slider_lp_order = self.add_slider_param(l_lp, "Order", 10, 1, 100, group=False)
-        self.spin_lp_train, self.slider_lp_train = self.add_slider_param(l_lp, "Train Len", 40, 10, 2000, group=False)
+        self.spin_lp_points, self.slider_lp_points = self.add_slider_param(l_lp, "Points", 0, 0, 1000, lp_colors)
+        self.spin_lp_order, self.slider_lp_order = self.add_slider_param(l_lp, "Order", 10, 1, 100, lp_colors)
+        self.spin_lp_train, self.slider_lp_train = self.add_slider_param(l_lp, "Train Len", 40, 10, 2000, lp_colors)
         gb_lp.setLayout(l_lp)
         params_layout.addWidget(gb_lp)
         
-        # Apodization
-        self.spin_t2, self.slider_t2 = self.add_float_slider_param(params_layout, "T2*", 0.0, 0.0, 10.0, 100)
-        self.chk_hanning = QCheckBox("Hanning Window")
-        params_layout.addWidget(self.chk_hanning)
-        self.spin_zf, self.slider_zf = self.add_float_slider_param(params_layout, "Zero Fill", 0.0, 0.0, 5.0, 10)
-        
         # Phase
-        self.spin_ph0, self.slider_ph0 = self.add_float_slider_param(params_layout, "Phase 0", 0.0, -360, 360, 1)
-        self.spin_ph1, self.slider_ph1 = self.add_float_slider_param(params_layout, "Phase 1", 0.0, -360, 360, 1)
+        phase_colors = ("#26a69a", "#00897b", "#26a69a", "#00897b", "#004d40")
+        gb_phase = QGroupBox("Phase Correction")
+        gb_phase.setStyleSheet(self.get_groupbox_style("#00897b"))
+        l_phase = QVBoxLayout()
+        self.spin_ph0, self.slider_ph0 = self.add_float_slider_param(l_phase, "Phase 0", 0.0, -360, 360, 1, phase_colors)
+        self.spin_ph1, self.slider_ph1 = self.add_float_slider_param(l_phase, "Phase 1", 0.0, -360, 360, 1, phase_colors)
+        gb_phase.setLayout(l_phase)
+        params_layout.addWidget(gb_phase)
         
         # SNR Calculation Range
         self.create_snr_group(params_layout)
@@ -294,7 +443,7 @@ class LiveMonitorUI(QMainWindow):
 
     def create_visualization_group(self, layout):
         gb = QGroupBox("Visualization Settings")
-        gb.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #00897b; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; color: #00897b; }")
+        gb.setStyleSheet(self.get_groupbox_style("#00897b"))
         v_layout = QVBoxLayout()
         
         # Display Mode
@@ -350,7 +499,7 @@ class LiveMonitorUI(QMainWindow):
 
     def create_snr_group(self, layout):
         gb = QGroupBox("SNR Calculation Range")
-        gb.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #e0e0e0; border-radius: 5px; margin-top: 10px; }")
+        gb.setStyleSheet(self.get_groupbox_style("#424242"))
         grid = QGridLayout()
         
         grid.addWidget(QLabel("Signal (Hz):"), 0, 0)
@@ -391,7 +540,7 @@ class LiveMonitorUI(QMainWindow):
 
     def create_results_group(self, layout):
         gb = QGroupBox("Results and Metrics")
-        gb.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #e0e0e0; border-radius: 5px; margin-top: 10px; }")
+        gb.setStyleSheet(self.get_groupbox_style("#424242"))
         v_layout = QVBoxLayout()
         
         self.metrics_table = QTableWidget()
@@ -415,80 +564,6 @@ class LiveMonitorUI(QMainWindow):
         
         gb.setLayout(v_layout)
         layout.addWidget(gb)
-
-    def add_slider_param(self, layout, label, val, min_val, max_val, group=True):
-        container = QWidget()
-        l = QVBoxLayout(container)
-        l.setContentsMargins(0, 5, 0, 5)
-        
-        h = QHBoxLayout()
-        lbl = QLabel(label)
-        sp = QSpinBox()
-        sp.setRange(min_val, max_val)
-        sp.setValue(val)
-        h.addWidget(lbl)
-        h.addWidget(sp)
-        l.addLayout(h)
-        
-        sl = QSlider(Qt.Horizontal)
-        sl.setRange(min_val, max_val)
-        sl.setValue(val)
-        l.addWidget(sl)
-        
-        # Sync
-        sp.valueChanged.connect(sl.setValue)
-        sl.valueChanged.connect(sp.setValue)
-        sp.valueChanged.connect(self.schedule_process)
-        
-        if group:
-            gb = QGroupBox()
-            gb.setLayout(l)
-            layout.addWidget(gb)
-        else:
-            layout.addWidget(container)
-            
-        return sp, sl
-
-    def add_float_slider_param(self, layout, label, val, min_val, max_val, scale_factor):
-        container = QWidget()
-        l = QVBoxLayout(container)
-        l.setContentsMargins(0, 5, 0, 5)
-        
-        h = QHBoxLayout()
-        lbl = QLabel(label)
-        sp = QDoubleSpinBox()
-        sp.setRange(min_val, max_val)
-        sp.setValue(val)
-        sp.setSingleStep(1.0/scale_factor)
-        h.addWidget(lbl)
-        h.addWidget(sp)
-        l.addLayout(h)
-        
-        sl = QSlider(Qt.Horizontal)
-        sl.setRange(int(min_val * scale_factor), int(max_val * scale_factor))
-        sl.setValue(int(val * scale_factor))
-        l.addWidget(sl)
-        
-        # Sync
-        def update_spin(v):
-            sp.blockSignals(True)
-            sp.setValue(v / scale_factor)
-            sp.blockSignals(False)
-            self.schedule_process()
-            
-        def update_slider(v):
-            sl.blockSignals(True)
-            sl.setValue(int(v * scale_factor))
-            sl.blockSignals(False)
-            self.schedule_process()
-            
-        sl.valueChanged.connect(update_spin)
-        sp.valueChanged.connect(update_slider)
-        
-        gb = QGroupBox()
-        gb.setLayout(l)
-        layout.addWidget(gb)
-        return sp, sl
 
     def select_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Monitor Folder")
@@ -606,16 +681,6 @@ class LiveMonitorUI(QMainWindow):
         low_max = self.freq_low_max.value()
         high_min = self.freq_high_min.value()
         high_max = self.freq_high_max.value()
-        
-        # We want to show two regions: low freq and high freq
-        # But matplotlib only supports one x-axis per subplot easily.
-        # For now, let's just set the view to the full range defined by min(low) and max(high)
-        # Or better, just respect the standard NMR convention (high to low)
-        # The original UI had specific "Maximize Low/High" actions, but here we have ranges.
-        # Let's just set the x-lim to cover the widest range specified if they are disjoint, 
-        # or just full range if not specified.
-        # Actually, the original UI had a "Update View Range" button that likely set the x-lim.
-        # Let's just set xlim to (high_max, low_min) to cover everything, reversed.
         
         self.ax_freq.set_xlim(high_max, low_min) # Reverse NMR convention
         
