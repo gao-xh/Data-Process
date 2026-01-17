@@ -224,12 +224,29 @@ class ProcessingWorker(QThread):
         
         # Step 1: Savgol filtering (baseline removal)
         if not self._running: return None
-        smooth_svd = scipy.signal.savgol_filter(
-            halp, 
-            int(self.params['conv_points']),
-            int(self.params['poly_order']), 
-            mode="mirror"
-        )
+        
+        # Handle complex data explicitly to avoid casting warning/error
+        if np.iscomplexobj(halp):
+            smooth_real = scipy.signal.savgol_filter(
+                halp.real, 
+                int(self.params['conv_points']),
+                int(self.params['poly_order']), 
+                mode="mirror"
+            )
+            smooth_imag = scipy.signal.savgol_filter(
+                halp.imag, 
+                int(self.params['conv_points']),
+                int(self.params['poly_order']), 
+                mode="mirror"
+            )
+            smooth_svd = smooth_real + 1j * smooth_imag
+        else:
+            smooth_svd = scipy.signal.savgol_filter(
+                halp, 
+                int(self.params['conv_points']),
+                int(self.params['poly_order']), 
+                mode="mirror"
+            )
         svd_corrected = halp - smooth_svd
         
         # Step 1.2: SVD Denoising (Cadzow)
@@ -2900,6 +2917,8 @@ class EnhancedNMRProcessingUI(QMainWindow):
                     QApplication.processEvents()
                     
                     # Load data from each folder
+                    scan_count_path = os.path.join(folder, "scan_count.npy")
+                    
                     if HAS_NMRDUINO:
                         # Try to load compiled data
                         compiled_path = os.path.join(folder, "halp_compiled.npy")
@@ -2907,14 +2926,24 @@ class EnhancedNMRProcessingUI(QMainWindow):
                             halp = np.load(compiled_path)
                             sr = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
                             at = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                            scans = nmr_util.scan_number_extraction(folder)
+                            
+                            # Prioritize saved scan count
+                            if os.path.exists(scan_count_path):
+                                scans = int(np.load(scan_count_path))
+                            else:
+                                scans = nmr_util.scan_number_extraction(folder)
                         else:
                             # Load and compile
                             compiled = nmr_util.nmrduino_dat_interp(folder, 0)
                             halp = compiled[0]
                             sr = compiled[1]
                             at = compiled[2]
-                            scans = nmr_util.scan_number_extraction(folder)
+                            
+                            # Prioritize saved scan count (though unlikely to exist if not compiled)
+                            if os.path.exists(scan_count_path):
+                                scans = int(np.load(scan_count_path))
+                            else:
+                                scans = nmr_util.scan_number_extraction(folder)
                     else:
                         # Manual loading fallback
                         compiled_path = os.path.join(folder, "halp_compiled.npy")
@@ -2922,11 +2951,20 @@ class EnhancedNMRProcessingUI(QMainWindow):
                             halp = np.load(compiled_path)
                             sr = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
                             at = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                            # Try to count .dat files
-                            dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
-                            scans = len(dat_files) if dat_files else 1
+                            
+                            if os.path.exists(scan_count_path):
+                                scans = int(np.load(scan_count_path))
+                            else:
+                                # Try to count .dat files
+                                dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
+                                scans = len(dat_files) if dat_files else 1
                         else:
                             raise FileNotFoundError(f"No compiled data found in {folder}")
+                    
+                    # Safety check for scan count
+                    if scans == 0:
+                        print(f"Warning: Scan count is 0 for {folder}, assuming 1")
+                        scans = 1
                     
                     # Check consistency
                     if common_sr is None:
@@ -3247,7 +3285,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.time_canvas.axes.grid(True, alpha=0.3, linestyle='--')
         self.time_canvas.axes.legend(fontsize=8, loc='upper right')
         self.time_canvas.axes.autoscale(enable=True, axis='y', tight=False)
-        self.time_canvas.fig.tight_layout()
+        try:
+            self.time_canvas.fig.tight_layout()
+        except Exception:
+            pass
         self.time_canvas.draw()
         
         # Frequency domain - low freq
@@ -3275,7 +3316,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq1_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
         self.freq1_canvas.axes.set_title(f'Low Frequency Spectrum ({freq_range_low[0]:.0f}-{freq_range_low[1]:.0f} Hz)', fontsize=11, fontweight='bold')
         self.freq1_canvas.axes.grid(True, alpha=0.3, linestyle='--')
-        self.freq1_canvas.fig.tight_layout()
+        try:
+            self.freq1_canvas.fig.tight_layout()
+        except Exception:
+            pass
         self.freq1_canvas.draw()
         
         # Frequency domain - high freq
@@ -3302,7 +3346,10 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.freq2_canvas.axes.set_ylabel(ylabel, fontsize=10, fontweight='bold')
         self.freq2_canvas.axes.set_title(f'High Frequency Spectrum ({freq_range_high[0]:.0f}-{freq_range_high[1]:.0f} Hz)', fontsize=11, fontweight='bold')
         self.freq2_canvas.axes.grid(True, alpha=0.3, linestyle='--')
-        self.freq2_canvas.fig.tight_layout()
+        try:
+            self.freq2_canvas.fig.tight_layout()
+        except Exception:
+            pass
         self.freq2_canvas.draw()
     
     def plot_side_by_side_comparison(self):
