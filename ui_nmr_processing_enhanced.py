@@ -56,6 +56,7 @@ try:
     )
     from nmr_processing_lib.processing.postprocessing import baseline_correction
     from nmr_processing_lib.processing.filtering import svd_denoising
+    from nmr_processing_lib.core.loader import ProgressiveLoader
 except ImportError:
     print("Warning: Could not import ZULF algorithms. Phase correction disabled.")
     # Define dummy functions if import fails
@@ -91,82 +92,114 @@ class MultiFolderDialog(QDialog):
     """Dialog for selecting multiple folders to combine"""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Load Multiple Folders (Combine)")
-        self.resize(600, 400)
+        self.setWindowTitle("Select Data Folders")
+        self.resize(500, 300)
         self.folders = []
         
+        # Main layout
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)
         
-        info_label = QLabel("Add multiple experiment folders to combine them into a single dataset.\n"
-                          "This is useful for experiments split across multiple directories.\n"
-                          "Data will be averaged weighted by scan count.")
-        info_label.setStyleSheet("color: #666; font-style: italic; margin-bottom: 10px;")
-        layout.addWidget(info_label)
-        
+        # List Widget
         self.list_widget = QListWidget()
+        self.list_widget.setSelectionMode(QListWidget.ExtendedSelection)
+        self.list_widget.setAlternatingRowColors(True)
         layout.addWidget(self.list_widget)
         
+        # Button Row: [Add Folder(s)] [Clear]
         btn_layout = QHBoxLayout()
-        add_btn = QPushButton("Add Folder...")
-        add_btn.clicked.connect(self.add_folder)
-        remove_btn = QPushButton("Remove Selected")
-        remove_btn.clicked.connect(self.remove_folder)
-        clear_btn = QPushButton("Clear All")
-        clear_btn.clicked.connect(self.clear_all)
+        btn_layout.setSpacing(10)
         
-        btn_layout.addWidget(add_btn)
-        btn_layout.addWidget(remove_btn)
-        btn_layout.addWidget(clear_btn)
+        self.add_btn = QPushButton("Add Folder(s)")
+        self.add_btn.clicked.connect(self.add_folder)
+        self.add_btn.setStyleSheet("font-weight: bold; padding: 6px 12px;")
+        
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self.clear_all)
+        self.clear_btn.setStyleSheet("padding: 6px 12px;")
+
+        # Added Remove for usability, though not in screenshot
+        self.remove_btn = QPushButton("Remove Selected")
+        self.remove_btn.clicked.connect(self.remove_folder)
+        self.remove_btn.setStyleSheet("padding: 6px 12px;")
+        
+        btn_layout.addWidget(self.add_btn)
+        btn_layout.addWidget(self.remove_btn)
+        btn_layout.addWidget(self.clear_btn)
+        
         layout.addLayout(btn_layout)
         
+        # Separator
         line = QWidget()
         line.setFixedHeight(1)
-        line.setStyleSheet("background-color: #e0e0e0;")
+        line.setStyleSheet("background-color: #cccccc;")
         layout.addWidget(line)
         
-        action_layout = QHBoxLayout()
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        self.load_btn = QPushButton("Load Combined Data")
+        # Dialog Buttons [Cancel] [Load Data]
+        dialog_btns = QHBoxLayout()
+        dialog_btns.addStretch()
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        
+        self.load_btn = QPushButton("Load Data")
         self.load_btn.clicked.connect(self.accept)
         self.load_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1976d2;
                 color: white;
                 font-weight: bold;
-                padding: 6px 12px;
+                padding: 6px 20px;
                 border-radius: 4px;
             }
             QPushButton:hover {
                 background-color: #1565c0;
             }
+            QPushButton:disabled {
+                background-color: #90caf9;
+            }
         """)
+        self.load_btn.setEnabled(False)
         
-        action_layout.addStretch()
-        action_layout.addWidget(cancel_btn)
-        action_layout.addWidget(self.load_btn)
-        layout.addLayout(action_layout)
-        
-        self.update_buttons()
-        
+        dialog_btns.addWidget(self.cancel_btn)
+        dialog_btns.addWidget(self.load_btn)
+        layout.addLayout(dialog_btns)
+
     def add_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Experiment Folder")
-        if folder and folder not in self.folders:
-            self.folders.append(folder)
-            self.list_widget.addItem(folder)
-            self.update_buttons()
-            
+        if folder:
+            path_str = str(Path(folder).resolve())
+            if path_str not in self.folders:
+                self.folders.append(path_str)
+                self.list_widget.addItem(path_str)
+                self.update_buttons()
+
     def remove_folder(self):
-        row = self.list_widget.currentRow()
-        if row >= 0:
+        selected_items = self.list_widget.selectedItems()
+        if not selected_items:
+            # Fallback to current row if no extended selection
+            row = self.list_widget.currentRow()
+            if row >= 0:
+                self.folders.pop(row)
+                self.list_widget.takeItem(row)
+                self.update_buttons()
+            return
+
+        # Inverse loop to remove
+        rows = sorted([self.list_widget.row(item) for item in selected_items], reverse=True)
+        for row in rows:
             self.folders.pop(row)
             self.list_widget.takeItem(row)
-            self.update_buttons()
-            
+        self.update_buttons()
+
     def clear_all(self):
         self.folders = []
         self.list_widget.clear()
         self.update_buttons()
+        
+    def update_buttons(self):
+        self.load_btn.setEnabled(len(self.folders) > 0)
             
     def update_buttons(self):
         self.load_btn.setEnabled(len(self.folders) > 0)
@@ -399,6 +432,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_count = 0
         self.current_path = None
         self.processed = None
+        self.loader = None
         
         # Data B (comparison)
         self.halp_b = None
@@ -407,6 +441,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
         self.scan_count_b = 0
         self.current_path_b = None
         self.processed_b = None
+        self.loader_b = None
         
         # Worker thread
         self.worker = None
@@ -773,11 +808,12 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 background-color: #3a5166;
             }
         """)
-        self.load_folder_btn.clicked.connect(self.load_folder)
+        # Connect to load_multiple_folders for the unified robust loader
+        self.load_folder_btn.clicked.connect(self.load_multiple_folders)
         btn_layout.addWidget(self.load_folder_btn)
         
-        self.load_params_btn = QPushButton("Load Parameters")
-        self.load_params_btn.setStyleSheet("""
+        self.load_comp_btn = QPushButton("Load Comparison")
+        self.load_comp_btn.setStyleSheet("""
             QPushButton {
                 background-color: #757575;
                 color: white;
@@ -794,21 +830,27 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 background-color: #424242;
             }
         """)
-        self.load_params_btn.clicked.connect(self.load_parameters)
-        btn_layout.addWidget(self.load_params_btn)
+        # Connect to load_folder_b for comparison loading
+        self.load_comp_btn.clicked.connect(self.load_folder_b)
+        btn_layout.addWidget(self.load_comp_btn)
         
         data_layout.addLayout(btn_layout)
         
-        self.data_info = QLabel("No data loaded")
+        self.data_info = QLabel("<b>Loaded:</b> None<br>"
+                              "<b>Points:</b> -<br>"
+                              "<b>Sampling:</b> -<br>"
+                              "<b>Acq Time:</b> -<br>"
+                              "<b>Scans:</b> -")
         self.data_info.setWordWrap(True)
         self.data_info.setStyleSheet("""
             QLabel {
-                padding: 10px;
-                background-color: #fafafa;
+                padding: 12px;
+                background-color: white;
                 border: 1px solid #e0e0e0;
-                border-radius: 5px;
-                color: #616161;
-                font-size: 10px;
+                border-radius: 6px;
+                color: #424242;
+                font-size: 11px;
+                line-height: 1.4;
             }
         """)
         data_layout.addWidget(self.data_info)
@@ -2695,6 +2737,54 @@ class EnhancedNMRProcessingUI(QMainWindow):
     
     def reload_selected_scans(self):
         """Reload data based on selected scan range"""
+        # Feature: Support ProgressiveLoader for scan selection
+        if hasattr(self, 'loader') and self.loader is not None:
+             try:
+                 if hasattr(self, '_is_reloading') and self._is_reloading:
+                     return
+                 self._is_reloading = True
+                 
+                 print("Reloading using ProgressiveLoader...")
+                 indices = None
+                 status_msg = ""
+                 
+                 if self.scan_mode_all.isChecked():
+                     indices = None
+                     status_msg = f"Loading all {self.scan_count} scans..."
+                 elif self.scan_mode_single.isChecked():
+                     # UI is 0-based for scan number
+                     idx = int(self.scan_single_num.value())
+                     indices = [idx]
+                     status_msg = f"Loading scan #{idx}..."
+                 elif self.scan_mode_range.isChecked():
+                     start = int(self.scan_range_start.value())
+                     end = int(self.scan_range_end.value())
+                     indices = list(range(start, end + 1))
+                     status_msg = f"Loading scans {start} to {end}..."
+
+                 print(status_msg)
+                 QApplication.processEvents()
+                 
+                 data, sr, at = self.loader.get_aggregated_data(indices)
+                 
+                 if data is None:
+                     print("Error: No data returned for selection")
+                     self._is_reloading = False
+                     return
+                     
+                 self.halp = data
+                 self.sampling_rate = sr
+                 self.acq_time = at
+                 
+                 print(f"Loaded {len(self.halp)} data points")
+                 self.schedule_processing()
+                 
+             except Exception as e:
+                 print(f"Error reloading scans (Loader): {e}")
+             finally:
+                 self._is_reloading = False
+             return
+
         if not hasattr(self, 'current_path') or not self.current_path:
             return
         
@@ -2894,7 +2984,7 @@ class EnhancedNMRProcessingUI(QMainWindow):
             QMessageBox.critical(self, "Load Error", f"Failed to load data:\n{e}")
 
     def load_multiple_folders(self):
-        """Load and combine data from multiple folders"""
+        """Load and combine data from multiple folders using ProgressiveLoader"""
         dialog = MultiFolderDialog(self)
         if dialog.exec() == QDialog.Accepted:
             folders = dialog.get_folders()
@@ -2903,118 +2993,49 @@ class EnhancedNMRProcessingUI(QMainWindow):
                 
             try:
                 self.progress_bar.setVisible(True)
-                self.progress_label.setText("Combining data from multiple folders...")
+                self.progress_label.setText("Scanning and indexing files...")
                 QApplication.processEvents()
                 
-                total_scans = 0
-                weighted_sum_data = None
-                common_sr = None
-                common_at = None
+                # Use ProgressiveLoader
+                self.loader = ProgressiveLoader(folders)
                 
-                for i, folder in enumerate(folders):
-                    # Update progress
-                    self.progress_label.setText(f"Loading folder {i+1}/{len(folders)}: {os.path.basename(folder)}")
-                    QApplication.processEvents()
-                    
-                    # Load data from each folder
-                    scan_count_path = os.path.join(folder, "scan_count.npy")
-                    
-                    if HAS_NMRDUINO:
-                        # Try to load compiled data
-                        compiled_path = os.path.join(folder, "halp_compiled.npy")
-                        if os.path.exists(compiled_path):
-                            halp = np.load(compiled_path)
-                            sr = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
-                            at = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                            
-                            # Prioritize saved scan count
-                            if os.path.exists(scan_count_path):
-                                scans = int(np.load(scan_count_path))
-                            else:
-                                scans = nmr_util.scan_number_extraction(folder)
-                        else:
-                            # Load and compile
-                            compiled = nmr_util.nmrduino_dat_interp(folder, 0)
-                            halp = compiled[0]
-                            sr = compiled[1]
-                            at = compiled[2]
-                            
-                            # Prioritize saved scan count (though unlikely to exist if not compiled)
-                            if os.path.exists(scan_count_path):
-                                scans = int(np.load(scan_count_path))
-                            else:
-                                scans = nmr_util.scan_number_extraction(folder)
-                    else:
-                        # Manual loading fallback
-                        compiled_path = os.path.join(folder, "halp_compiled.npy")
-                        if os.path.exists(compiled_path):
-                            halp = np.load(compiled_path)
-                            sr = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
-                            at = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                            
-                            if os.path.exists(scan_count_path):
-                                scans = int(np.load(scan_count_path))
-                            else:
-                                # Try to count .dat files
-                                dat_files = [f for f in os.listdir(folder) if f.endswith('.dat')]
-                                scans = len(dat_files) if dat_files else 1
-                        else:
-                            raise FileNotFoundError(f"No compiled data found in {folder}")
-                    
-                    # Safety check for scan count
-                    if scans == 0:
-                        print(f"Warning: Scan count is 0 for {folder}, assuming 1")
-                        scans = 1
-                    
-                    # Check consistency
-                    if common_sr is None:
-                        common_sr = sr
-                        common_at = at
-                        weighted_sum_data = np.zeros_like(halp, dtype=complex)
-                    else:
-                        if abs(sr - common_sr) > 1.0:
-                            raise ValueError(f"Sampling rate mismatch in {folder}")
-                        if abs(at - common_at) > 0.01:
-                            # Allow small mismatch, maybe truncate?
-                            # For now, strict check or resize
-                            if len(halp) != len(weighted_sum_data):
-                                # Resize to match smallest? Or error?
-                                # Let's assume they must match
-                                raise ValueError(f"Data length mismatch in {folder}")
-                    
-                    # Accumulate weighted sum
-                    # Assuming halp is the average of scans in that folder
-                    weighted_sum_data += halp * scans
-                    total_scans += scans
+                self.progress_label.setText(f"Aggregating {self.loader.get_count()} scans...")
+                QApplication.processEvents()
                 
-                # Calculate final average
-                if total_scans > 0:
-                    self.halp = weighted_sum_data / total_scans
-                    self.sampling_rate = common_sr
-                    self.acq_time = common_at
-                    self.scan_count = total_scans
-                    self.current_path = folders[0] # Use first folder as reference path
+                # Load aggregated data
+                self.halp, self.sampling_rate, self.acq_time = self.loader.get_aggregated_data()
+                
+                if self.halp is None:
+                    raise ValueError("No valid data found in selected folders")
+
+                self.scan_count = self.loader.get_count()
+                self.current_path = str(folders[0]) # Use first folder as reference path
+                
+                # Format specific to user screenshot
+                folder_name = os.path.basename(str(folders[0]))
+                if len(folders) > 1:
+                    folder_name += f" (+{len(folders)-1})"
                     
-                    self.data_info.setText(
-                        f"<b>Combined:</b> {len(folders)} folders<br>"
-                        f"<b>Points:</b> {len(self.halp)}<br>"
-                        f"<b>Sampling:</b> {self.sampling_rate:.1f} Hz<br>"
-                        f"<b>Acq Time:</b> {self.acq_time:.3f} s<br>"
-                        f"<b>Total Scans:</b> {self.scan_count}"
-                    )
-                    
-                    # Enable controls
-                    self.process_btn.setEnabled(True)
-                    self.save_params_btn.setEnabled(True)
-                    
-                    # Reset scan selection (since we combined, individual scan selection is complex)
-                    self.scan_mode_all.setChecked(True)
-                    self.scan_selection_info.setText("Scan selection disabled for combined data")
-                    self.apply_scan_btn.setEnabled(False)
-                    
-                    # Auto process
-                    self.process_data()
-                    
+                self.data_info.setText(
+                    f"<b>Loaded:</b> {folder_name}<br>"
+                    f"<b>Points:</b> {len(self.halp)}<br>"
+                    f"<b>Sampling:</b> {self.sampling_rate:.1f} Hz<br>"
+                    f"<b>Acq Time:</b> {self.acq_time:.3f} s<br>"
+                    f"<b>Scans:</b> {self.scan_count}"
+                )
+                
+                # Enable controls
+                self.process_btn.setEnabled(True)
+                self.save_params_btn.setEnabled(True)
+                
+                # Reset scan selection
+                self.scan_mode_all.setChecked(True)
+                self.scan_selection_info.setText("Scan selection enabled (Multi-Folder)")
+                self.apply_scan_btn.setEnabled(True)
+                
+                # Auto process
+                self.process_data()
+                
                 self.progress_bar.setVisible(False)
                 self.progress_label.setText("")
                 
@@ -3846,37 +3867,39 @@ class EnhancedNMRProcessingUI(QMainWindow):
             self.plot_results()
 
     def load_folder_b(self):
-        """Load Data B folder"""
-        folder = QFileDialog.getExistingDirectory(self, "Select Data B Folder")
-        if not folder:
-            return
+        """Load Data B (Comparison) using MultiFolderDialog and ProgressiveLoader"""
+        dialog = MultiFolderDialog(self)
+        dialog.setWindowTitle("Load Comparison Data")
+        
+        if dialog.exec() == QDialog.Accepted:
+            folders = dialog.get_folders()
+            if not folders:
+                return
             
-        try:
-            self.current_path_b = folder
-            if HAS_NMRDUINO:
-                compiled = nmr_util.nmrduino_dat_interp(folder, 0)
-                self.halp_b = compiled[0]
-                self.sampling_rate_b = compiled[1]
-                self.acq_time_b = compiled[2]
-                self.scan_count_b = nmr_util.scan_number_extraction(folder)
-            else:
-                # Fallback manual load
-                compiled_path = os.path.join(folder, "halp_compiled.npy")
-                if os.path.exists(compiled_path):
-                    self.halp_b = np.load(compiled_path)
-                    self.sampling_rate_b = np.load(os.path.join(folder, "sampling_rate_compiled.npy"))
-                    self.acq_time_b = np.load(os.path.join(folder, "acq_time_compiled.npy"))
-                else:
-                    raise FileNotFoundError("No compiled data found for Data B")
-            
-            self.data_b_info.setText(f"Loaded: {os.path.basename(folder)}")
-            
-            # Process if we have params
-            if self.use_same_params:
+            try:
+                self.progress_bar.setVisible(True)
+                self.progress_label.setText("Loading comparison data...")
+                QApplication.processEvents()
+                
+                # Use ProgressiveLoader for Data B
+                self.loader_b = ProgressiveLoader(folders)
+                self.halp_b, self.sampling_rate_b, self.acq_time_b = self.loader_b.get_aggregated_data()
+                
+                if self.halp_b is None:
+                    raise ValueError("No valid data found in comparison folders")
+                
+                self.scan_count_b = self.loader_b.get_count()
+                self.current_path_b = str(folders[0])
+                self.processed_b = None # Force reprocessing
+                
+                self.data_b_info.setText(f"Loaded: {len(folders)} folders ({self.scan_count_b} scans)")
+                
+                # Trigger processing
                 self.process_data()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
+                
+            except Exception as e:
+                self.progress_bar.setVisible(False)
+                QMessageBox.critical(self, "Load Error", f"Failed to load Data B:\n{e}")
 
     # =========================================================================
     # Live Monitor Methods
